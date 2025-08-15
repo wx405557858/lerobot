@@ -1769,14 +1769,29 @@ def make_robot_env(cfg: EnvConfig) -> gym.Env:
     if cfg.type == "hil":
         import gym_hil  # noqa: F401
 
-        # TODO (azouitine)
-        env = gym.make(
-            f"gym_hil/{cfg.task}",
-            image_obs=True,
-            render_mode="human",
-            use_gripper=cfg.wrapper.use_gripper,
-            gripper_penalty=cfg.wrapper.gripper_penalty,
-        )
+        if cfg.task == "InterbotixPickEnv-v0":
+            import hangingbot.gym.interbotix_pick_env
+            from hangingbot.gym.wrappers.hil_wrappers import InputsControlWrapper, EEActionWrapper
+            env = gym.make(
+                f"{cfg.task}",
+            )
+            env = InputsControlWrapper(
+                env,
+                x_step_size=1.0,
+                y_step_size=1.0,
+                z_step_size=1.0,
+                use_gripper=True,
+            )
+            env = EEActionWrapper(env, use_gripper=True)
+        else:
+            # TODO (azouitine)
+            env = gym.make(
+                f"gym_hil/{cfg.task}",
+                image_obs=True,
+                render_mode="human",
+                use_gripper=cfg.wrapper.use_gripper,
+                gripper_penalty=cfg.wrapper.gripper_penalty,
+            )
         env = GymHilObservationProcessorWrapper(env=env)
         env = GymHilDeviceWrapper(env=env, device=cfg.device)
         env = BatchCompatibleWrapper(env=env)
