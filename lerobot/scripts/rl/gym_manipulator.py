@@ -1947,6 +1947,7 @@ def record_dataset(env, policy, cfg):
 
     # Setup initial action (zero action if using teleop)
     action = env.action_space.sample() * 0.0
+    action[-1] = 1.0 if cfg.wrapper.use_gripper else 0.0  # Gripper action if applicable
 
     action_names = ["delta_x_ee", "delta_y_ee", "delta_z_ee"]
     if cfg.wrapper.use_gripper:
