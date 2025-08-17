@@ -343,8 +343,8 @@ class SACPolicy(
 
             # Compute target Q-value with Bellman equation
             rewards_discrete = rewards
-            if discrete_penalties is not None:
-                rewards_discrete = rewards + discrete_penalties
+            # if discrete_penalties is not None:
+            #     rewards_discrete = rewards + discrete_penalties
             target_discrete_q = rewards_discrete + (1 - done) * self.config.discount * target_next_discrete_q
 
         # Get predicted Q-values for current observations

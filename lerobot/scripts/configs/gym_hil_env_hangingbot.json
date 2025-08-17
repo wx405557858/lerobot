@@ -39,7 +39,7 @@
     },
     "name": "franka_sim",
     "mode": "record",
-    "repo_id": "wx405557858/pick_env_0",
+    "repo_id": "wx405557858/pick_env_1",
     "dataset_root": null,
     "task": "InterbotixPickEnv-v0",
     "num_episodes": 30,

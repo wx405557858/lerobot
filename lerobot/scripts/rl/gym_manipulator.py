@@ -1775,7 +1775,7 @@ def make_robot_env(cfg: EnvConfig) -> gym.Env:
             env = gym.make(
                 f"{cfg.task}",
             )
-            env = EEActionWrapper(env, use_gripper=True)
+            env = EEActionWrapper(env, use_gripper=cfg.wrapper.use_gripper)
             env = InputsControlWrapper(
                 env,
                 x_step_size=1.0,
