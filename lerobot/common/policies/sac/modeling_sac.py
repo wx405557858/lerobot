@@ -57,6 +57,7 @@ class SACPolicy(
         self._init_critics(continuous_action_dim)
         self._init_actor(continuous_action_dim)
         self._init_temperature()
+        self.epsilon_greedy = config.epsilon_greedy
 
     def get_optim_params(self) -> dict:
         optim_params = {
@@ -89,7 +90,14 @@ class SACPolicy(
 
         if self.config.num_discrete_actions is not None:
             discrete_action_value = self.discrete_critic(batch, observations_features)
+            # Select the best discrete action based on Q-values
             discrete_action = torch.argmax(discrete_action_value, dim=-1, keepdim=True)
+            # Create mask with same shape as discrete_action for epsilon-greedy selection
+            mask_random = torch.rand_like(discrete_action.float()) < self.epsilon_greedy
+            # Randomly select discrete action with epsilon probability
+            discrete_action[mask_random] = torch.randint(
+                low=0, high=self.config.num_discrete_actions, size=discrete_action[mask_random].shape, device=discrete_action.device
+            )
             actions = torch.cat([actions, discrete_action], dim=-1)
 
         return actions
@@ -322,6 +330,9 @@ class SACPolicy(
         if complementary_info is not None:
             discrete_penalties: Tensor | None = complementary_info.get("discrete_penalty")
 
+        self.epsilon_greedy *= self.config.epsilon_decay
+        self.epsilon_greedy = max(self.epsilon_greedy, self.config.epsilon_greedy_min)
+        print(f"Epsilon greedy: {self.epsilon_greedy}")
         with torch.no_grad():
             # For DQN, select actions using online network, evaluate with target network
             next_discrete_qs = self.discrete_critic_forward(

@@ -9,13 +9,14 @@
     "log_freq": 1,
     "save_checkpoint": true,
     "save_freq": 2000,
+    "pretrained_policy_name_or_path": "/home/shaoxiong/Code/lerobot/outputs/train/2025-08-22/21-16-18_default/checkpoints/0014000/pretrained_model",
     "wandb": {
         "enable": true,
         "project": "test_franka_sim",
         "disable_artifact": true
     },
     "dataset": {
-        "repo_id": "wx405557858/pick_env_2",
+        "repo_id": "wx405557858/pick_ring_env_5",
         "use_imagenet_stats": false
     },
     "policy": {
@@ -47,7 +48,7 @@
             "observation.state": {
                 "type": "STATE",
                 "shape": [
-                    3
+                    7
                 ]
             }
         },
@@ -55,7 +56,7 @@
             "action": {
                 "type": "ACTION",
                 "shape": [
-                    3
+                    4
                 ]
             }
         },
@@ -90,9 +91,17 @@
                 "min": [
                     -1.0,
                     -1.0,
+                    -1.0,
+                    -1.0,
+                    -1.0,
+                    -1.0,
                     -1.0
                 ],
                 "max": [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
                     1.0,
                     1.0,
                     1.0
@@ -106,7 +115,7 @@
         "shared_encoder": true,
         "online_steps": 1000000,
         "online_env_seed": 10000,
-        "online_buffer_capacity": 50000,
+        "online_buffer_capacity": 30000,
         "offline_buffer_capacity": 100000,
         "online_step_before_learning": 100,
         "policy_update_freq": 1,
@@ -118,13 +127,13 @@
         "actor_lr": 0.0003,
         "temperature_lr": 0.0003,
         "critic_target_update_weight": 0.005,
-        "utd_ratio": 2,
+        "utd_ratio": 5,
         "state_encoder_hidden_dim": 256,
         "latent_dim": 64,
         "target_entropy": null,
         "use_backup_entropy": true,
         "grad_clip_norm": 10.0,
-        "num_discrete_actions": 3,
+        "num_discrete_actions": null,
         "critic_network_kwargs": {
             "hidden_dims": [
                 256,
@@ -181,7 +190,7 @@
             128
         ],
         "control_time_s": 15.0,
-        "use_gripper": true,
+        "use_gripper": false,
         "fixed_reset_joint_positions": [
             0.0,
             0.195,
@@ -196,15 +205,14 @@
     },
     "name": "franka_sim",
     "mode": null,
-    "repo_id": "wx405557858/pick_env_2",
+    "repo_id": "wx405557858/pick_ring_env_5",
     "dataset_root": null,
     "task": "InterbotixPickEnv-v0",
     "num_episodes": 30,
     "episode": 0,
-    "pretrained_policy_name_or_path": null,
     "device": "cuda",
     "push_to_hub": true,
-    "fps": 10,
+    "fps": 2,
     "features": {
         "observation.images.front": {
             "type": "VISUAL",
@@ -225,13 +233,13 @@
         "observation.state": {
             "type": "STATE",
             "shape": [
-                3
+                7
             ]
         },
         "action": {
             "type": "ACTION",
             "shape": [
-                3
+                4
             ]
         }
     },

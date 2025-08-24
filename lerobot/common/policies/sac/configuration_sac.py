@@ -151,6 +151,9 @@ class SACConfig(PreTrainedConfig):
     online_step_before_learning: int = 100
     # Frequency of policy updates
     policy_update_freq: int = 1
+    epsilon_greedy: float = 0.3
+    epsilon_greedy_min: float = 0.05
+    epsilon_decay: float = 0.99999
 
     # SAC algorithm parameters
     # Discount factor for the SAC algorithm

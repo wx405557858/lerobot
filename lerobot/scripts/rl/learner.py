@@ -313,10 +313,13 @@ def add_actor_information_and_train(
 
     logging.info("Initializing policy")
 
-    policy: SACPolicy = make_policy(
-        cfg=cfg.policy,
-        env_cfg=cfg.env,
-    )
+    if cfg.pretrained_policy_name_or_path is not None:
+        policy = SACPolicy.from_pretrained(cfg.pretrained_policy_name_or_path)
+    else:
+        policy: SACPolicy = make_policy(
+            cfg=cfg.policy,
+            env_cfg=cfg.env,
+        )
 
     assert isinstance(policy, nn.Module)
 

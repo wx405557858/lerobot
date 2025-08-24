@@ -1775,7 +1775,7 @@ def make_robot_env(cfg: EnvConfig) -> gym.Env:
             env = gym.make(
                 f"{cfg.task}",
             )
-            env = EEActionWrapper(env, use_gripper=cfg.wrapper.use_gripper)
+            # env = EEActionWrapper(env, use_gripper=cfg.wrapper.use_gripper)
             env = InputsControlWrapper(
                 env,
                 x_step_size=1.0,
@@ -1950,7 +1950,8 @@ def record_dataset(env, policy, cfg):
     action[-1] = 1.0 if cfg.wrapper.use_gripper else 0.0  # Gripper action if applicable
 
     action_names = ["delta_x_ee", "delta_y_ee", "delta_z_ee"]
-    if cfg.wrapper.use_gripper:
+    # if cfg.wrapper.use_gripper:
+    if True:
         action_names.append("gripper_delta")
 
     # Configure dataset features based on environment spaces
@@ -2128,14 +2129,15 @@ def main(cfg: EnvConfig):
     """
     env = make_robot_env(cfg)
 
-    if cfg.mode == "record":
-        policy = None
-        if cfg.pretrained_policy_name_or_path is not None:
-            from lerobot.common.policies.sac.modeling_sac import SACPolicy
+    policy = None
+    if cfg.pretrained_policy_name_or_path is not None:
+        from lerobot.common.policies.sac.modeling_sac import SACPolicy
 
-            policy = SACPolicy.from_pretrained(cfg.pretrained_policy_name_or_path)
-            policy.to(cfg.device)
-            policy.eval()
+        policy = SACPolicy.from_pretrained(cfg.pretrained_policy_name_or_path)
+        policy.to(cfg.device)
+        policy.eval()
+
+    if cfg.mode == "record":
 
         record_dataset(
             env,
@@ -2143,6 +2145,7 @@ def main(cfg: EnvConfig):
             cfg=cfg,
         )
         exit()
+    
 
     if cfg.mode == "replay":
         replay_episode(
@@ -2162,12 +2165,17 @@ def main(cfg: EnvConfig):
 
     num_episode = 0
     successes = []
-    while num_episode < 10:
+    obs, _ = env.reset()
+    while num_episode < 1000:
         start_loop_s = time.perf_counter()
-        # Sample a new random action from the robot's action space.
-        new_random_action = env.action_space.sample()
-        # Update the smoothed action using an exponential moving average.
-        smoothed_action = alpha * new_random_action + (1 - alpha) * smoothed_action
+        if policy is not None:
+            smoothed_action = policy.select_action(obs)
+        else:
+            # Sample a new random action from the robot's action space.
+            new_random_action = env.action_space.sample()
+            # Update the smoothed action using an exponential moving average.
+            smoothed_action = alpha * new_random_action + (1 - alpha) * smoothed_action
+
 
         # Execute the step: wrap the NumPy action in a torch tensor.
         obs, reward, terminated, truncated, info = env.step(smoothed_action)
