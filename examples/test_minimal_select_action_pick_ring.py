@@ -25,7 +25,7 @@ def test_select_action_pick_ring():
     
     # Configuration
     policy_path = "lerobot/smolvla_base"
-    dataset_repo_id = "wx405557858/pick_ring_env_0"
+    dataset_repo_id = "wx405557858/pick_ring_env_5"
     
     try:
         # 1. Create config
@@ -49,7 +49,6 @@ def test_select_action_pick_ring():
         
         # Print dataset metadata for debugging
         print(f"Dataset metadata:")
-        print(f"  Action keys: {dataset.meta.names.get('action', [])}")
         print(f"  Action shape: {dataset.meta.shapes.get('action', 'Unknown')}")
         
         # 3. Prepare observation batch

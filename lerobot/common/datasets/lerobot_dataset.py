@@ -187,7 +187,7 @@ class LeRobotDatasetMetadata:
     @property
     def names(self) -> dict[str, list | dict]:
         """Names of the various dimensions of vector modalities."""
-        return {key: ft["names"] for key, ft in self.features.items()}
+        return {key: ft.get("names", None) for key, ft in self.features.items()}
 
     @property
     def shapes(self) -> dict:
