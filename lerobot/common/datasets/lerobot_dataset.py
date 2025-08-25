@@ -187,7 +187,7 @@ class LeRobotDatasetMetadata:
     @property
     def names(self) -> dict[str, list | dict]:
         """Names of the various dimensions of vector modalities."""
-        return {key: ft["names"] for key, ft in self.features.items()}
+        return {key: ft.get("names", None) for key, ft in self.features.items()}
 
     @property
     def shapes(self) -> dict:
@@ -664,7 +664,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         for key in self.meta.video_keys:
             if query_indices is not None and key in query_indices:
                 timestamps = self.hf_dataset.select(query_indices[key])["timestamp"]
-                query_timestamps[key] = torch.stack(timestamps).tolist()
+                query_timestamps[key] = torch.stack([torch.tensor(x) if not isinstance(x, torch.Tensor) else x for x in timestamps]).tolist()
             else:
                 query_timestamps[key] = [current_ts]
 
@@ -672,7 +672,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
     def _query_hf_dataset(self, query_indices: dict[str, list[int]]) -> dict:
         return {
-            key: torch.stack(self.hf_dataset.select(q_idx)[key])
+            key: torch.stack(list(self.hf_dataset.select(q_idx)[key]))
             for key, q_idx in query_indices.items()
             if key not in self.meta.video_keys
         }
