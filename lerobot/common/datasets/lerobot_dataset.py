@@ -663,19 +663,23 @@ class LeRobotDataset(torch.utils.data.Dataset):
         query_timestamps = {}
         for key in self.meta.video_keys:
             if query_indices is not None and key in query_indices:
-                timestamps = self.hf_dataset.select(query_indices[key])["timestamp"]
-                query_timestamps[key] = torch.stack([torch.tensor(x) if not isinstance(x, torch.Tensor) else x for x in timestamps]).tolist()
+                # Get timestamps directly by index to avoid dataset.select() issues in multiprocessing
+                timestamps = [self.hf_dataset[idx]["timestamp"] for idx in query_indices[key]]
+                query_timestamps[key] = [ts.item() if hasattr(ts, 'item') else ts for ts in timestamps]
             else:
                 query_timestamps[key] = [current_ts]
 
         return query_timestamps
 
     def _query_hf_dataset(self, query_indices: dict[str, list[int]]) -> dict:
-        return {
-            key: torch.stack(list(self.hf_dataset.select(q_idx)[key]))
-            for key, q_idx in query_indices.items()
-            if key not in self.meta.video_keys
-        }
+        result = {}
+        for key, q_idx in query_indices.items():
+            if key not in self.meta.video_keys:
+                # Get data directly by index to avoid dataset.select() issues in multiprocessing
+                data_list = [self.hf_dataset[idx][key] for idx in q_idx]
+                # Stack the tensors
+                result[key] = torch.stack(data_list)
+        return result
 
     def _query_videos(self, query_timestamps: dict[str, list[float]], ep_idx: int) -> dict[str, torch.Tensor]:
         """Note: When using data workers (e.g. DataLoader with num_workers>0), do not call this function
