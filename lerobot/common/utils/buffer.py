@@ -33,7 +33,8 @@ class BatchTransition(TypedDict):
     next_state: dict[str, torch.Tensor]
     done: torch.Tensor
     truncated: torch.Tensor
-    complementary_info: dict[str, torch.Tensor | float | int] | None = None
+    task: list[str] | None = None
+    complementary_info: dict[str, torch.Tensor | list[str] | float | int] | None = None
 
 
 def random_crop_vectorized(images: torch.Tensor, output_size: tuple) -> torch.Tensor:
@@ -120,6 +121,9 @@ class ReplayBuffer:
         # If no state_keys provided, default to an empty list
         self.state_keys = state_keys if state_keys is not None else []
 
+        # Initialize task storage
+        self.tasks = [None] * capacity
+
         self.image_augmentation_function = image_augmentation_function
 
         if image_augmentation_function is None:
@@ -177,6 +181,9 @@ class ReplayBuffer:
                 elif isinstance(value, (int, float)):
                     # Handle scalar values similar to reward
                     self.complementary_info[key] = torch.empty((self.capacity,), device=self.storage_device)
+                elif isinstance(value, str):
+                    # Handle string values - store as list since strings can't be stored in tensors
+                    self.complementary_info[key] = [None] * self.capacity
                 else:
                     raise ValueError(f"Unsupported type {type(value)} for complementary_info[{key}]")
 
@@ -193,7 +200,8 @@ class ReplayBuffer:
         next_state: dict[str, torch.Tensor],
         done: bool,
         truncated: bool,
-        complementary_info: dict[str, torch.Tensor] | None = None,
+        task: str | None = None,
+        complementary_info: dict[str, torch.Tensor | str | float | int] | None = None,
     ):
         """Saves a transition, ensuring tensors are stored on the designated storage device."""
         # Initialize storage if this is the first transition
@@ -213,6 +221,9 @@ class ReplayBuffer:
         self.dones[self.position] = done
         self.truncateds[self.position] = truncated
 
+        # Store task
+        self.tasks[self.position] = task
+
         # Handle complementary_info if provided and storage is initialized
         if complementary_info is not None and self.has_complementary_info:
             # Store the complementary_info
@@ -222,6 +233,8 @@ class ReplayBuffer:
                     if isinstance(value, torch.Tensor):
                         self.complementary_info[key][self.position].copy_(value.squeeze(dim=0))
                     elif isinstance(value, (int, float)):
+                        self.complementary_info[key][self.position] = value
+                    elif isinstance(value, str):
                         self.complementary_info[key][self.position] = value
 
         self.position = (self.position + 1) % self.capacity
@@ -284,12 +297,21 @@ class ReplayBuffer:
         batch_dones = self.dones[idx].to(self.device).float()
         batch_truncateds = self.truncateds[idx].to(self.device).float()
 
+        # Sample tasks
+        batch_tasks = [self.tasks[i.item()] for i in idx]
+
         # Sample complementary_info if available
         batch_complementary_info = None
         if self.has_complementary_info:
             batch_complementary_info = {}
             for key in self.complementary_info_keys:
-                batch_complementary_info[key] = self.complementary_info[key][idx].to(self.device)
+                values = self.complementary_info[key]
+                if isinstance(values, list):
+                    # Handle string values stored as list
+                    batch_complementary_info[key] = [values[i.item()] for i in idx]
+                else:
+                    # Handle tensor values
+                    batch_complementary_info[key] = values[idx].to(self.device)
 
         return BatchTransition(
             state=batch_state,
@@ -298,6 +320,7 @@ class ReplayBuffer:
             next_state=batch_next_state,
             done=batch_dones,
             truncated=batch_truncateds,
+            task=batch_tasks,
             complementary_info=batch_complementary_info,
         )
 
@@ -499,6 +522,7 @@ class ReplayBuffer:
                 next_state=data["next_state"],
                 done=data["done"],
                 truncated=False,  # NOTE: Truncation are not supported yet in lerobot dataset
+                task=data.get("task", None),
                 complementary_info=data.get("complementary_info", None),
             )
 
@@ -545,10 +569,14 @@ class ReplayBuffer:
         if self.has_complementary_info:
             for key in self.complementary_info_keys:
                 sample_val = self.complementary_info[key][0]
-                if isinstance(sample_val, torch.Tensor) and sample_val.ndim == 0:
-                    sample_val = sample_val.unsqueeze(0)
-                f_info = guess_feature_info(t=sample_val, name=f"complementary_info.{key}")
-                features[f"complementary_info.{key}"] = f_info
+                if isinstance(sample_val, str):
+                    # Handle string values - use string feature type
+                    features[f"complementary_info.{key}"] = {"dtype": "string", "shape": []}
+                else:
+                    if isinstance(sample_val, torch.Tensor) and sample_val.ndim == 0:
+                        sample_val = sample_val.unsqueeze(0)
+                    f_info = guess_feature_info(t=sample_val, name=f"complementary_info.{key}")
+                    features[f"complementary_info.{key}"] = f_info
 
         # Create an empty LeRobotDataset
         lerobot_dataset = LeRobotDataset.create(
@@ -595,8 +623,9 @@ class ReplayBuffer:
                     else:
                         frame_dict[f"complementary_info.{key}"] = val
 
-            # Add to the dataset's buffer
-            lerobot_dataset.add_frame(frame_dict, task=task_name)
+            # Add to the dataset's buffer with the actual task from the replay buffer
+            task = self.tasks[actual_idx] if self.tasks[actual_idx] is not None else task_name
+            lerobot_dataset.add_frame(frame_dict, task=task)
 
             # Move to next frame
             frame_idx_in_episode += 1
@@ -678,7 +707,10 @@ class ReplayBuffer:
             # ----- 2) Action -----
             action = current_sample["action"].unsqueeze(0)  # Add batch dimension
 
-            # ----- 3) Reward and done -----
+            # ----- 3) Task -----
+            task = current_sample.get("task", None)
+
+            # ----- 4) Reward and done -----
             reward = float(current_sample["next.reward"].item())  # ensure float
 
             # Determine done flag - use next.done if available, otherwise infer from episode boundaries
@@ -697,7 +729,7 @@ class ReplayBuffer:
             # TODO: (azouitine) Handle truncation (using the same value as done for now)
             truncated = done
 
-            # ----- 4) Next state -----
+            # ----- 5) Next state -----
             # If not done and the next sample is in the same episode, we pull the next sample's state.
             # Otherwise (done=True or next sample crosses to a new episode), next_state = current_state.
             next_state = current_state  # default
@@ -711,7 +743,7 @@ class ReplayBuffer:
                         next_state_data[key] = val.unsqueeze(0)  # Add batch dimension
                     next_state = next_state_data
 
-            # ----- 5) Complementary info (if available) -----
+            # ----- 6) Complementary info (if available) -----
             complementary_info = None
             if has_complementary_info:
                 complementary_info = {}
@@ -735,6 +767,7 @@ class ReplayBuffer:
                 next_state=next_state,
                 done=done,
                 truncated=truncated,
+                task=task,
                 complementary_info=complementary_info,
             )
             transitions.append(transition)
@@ -820,6 +853,15 @@ def concatenate_batch_transitions(
         [left_batch_transitions["truncated"], right_batch_transition["truncated"]],
         dim=0,
     )
+
+    # Handle task field
+    left_tasks = left_batch_transitions.get("task")
+    right_tasks = right_batch_transition.get("task")
+    
+    if left_tasks is not None and right_tasks is not None:
+        left_batch_transitions["task"] = left_tasks + right_tasks
+    elif right_tasks is not None:
+        left_batch_transitions["task"] = right_tasks
 
     # Handle complementary_info
     left_info = left_batch_transitions.get("complementary_info")

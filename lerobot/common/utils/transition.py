@@ -26,7 +26,8 @@ class Transition(TypedDict):
     next_state: dict[str, torch.Tensor]
     done: bool
     truncated: bool
-    complementary_info: dict[str, torch.Tensor | float | int] | None = None
+    task: str | None = None
+    complementary_info: dict[str, torch.Tensor | float | int | str] | None = None
 
 
 def move_transition_to_device(transition: Transition, device: str = "cpu") -> Transition:
@@ -63,6 +64,9 @@ def move_transition_to_device(transition: Transition, device: str = "cpu") -> Tr
                 transition["complementary_info"][key] = val.to(device, non_blocking=non_blocking)
             elif isinstance(val, (int, float, bool)):
                 transition["complementary_info"][key] = torch.tensor(val, device=device)
+            elif isinstance(val, str):
+                # Strings don't need to be moved to device, keep as-is
+                transition["complementary_info"][key] = val
             else:
                 raise ValueError(f"Unsupported type {type(val)} for complementary_info[{key}]")
     return transition
