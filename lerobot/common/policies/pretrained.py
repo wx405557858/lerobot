@@ -136,18 +136,66 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
 
     @classmethod
     def _load_as_safetensor(cls, model: T, model_file: str, map_location: str, strict: bool) -> T:
-        if packaging.version.parse(safetensors.__version__) < packaging.version.parse("0.4.3"):
-            load_model_as_safetensor(model, model_file, strict=strict)
-            if map_location != "cpu":
-                logging.warning(
-                    "Loading model weights on other devices than 'cpu' is not supported natively in your version of safetensors."
-                    " This means that the model is loaded on 'cpu' first and then copied to the device."
-                    " This leads to a slower loading time."
-                    " Please update safetensors to version 0.4.3 or above for improved performance."
-                )
-                model.to(map_location)
-        else:
-            safetensors.torch.load_model(model, model_file, strict=strict, device=map_location)
+        try:
+            if packaging.version.parse(safetensors.__version__) < packaging.version.parse("0.4.3"):
+                load_model_as_safetensor(model, model_file, strict=strict)
+                if map_location != "cpu":
+                    logging.warning(
+                        "Loading model weights on other devices than 'cpu' is not supported natively in your version of safetensors."
+                        " This means that the model is loaded on 'cpu' first and then copied to the device."
+                        " This leads to a slower loading time."
+                        " Please update safetensors to version 0.4.3 or above for improved performance."
+                    )
+                    model.to(map_location)
+            else:
+                safetensors.torch.load_model(model, model_file, strict=strict, device=map_location)
+        except RuntimeError as e:
+            if "shared tensors" in str(e) or "found no suitable name to keep" in str(e):
+                if strict:
+                    logging.warning(
+                        "Detected shared tensors in the model. Retrying with strict=False to handle shared parameters."
+                    )
+                    return cls._load_as_safetensor(model, model_file, map_location, strict=False)
+                else:
+                    # If strict=False still fails, try loading the state dict manually and handle shared tensors
+                    logging.warning(
+                        "Safetensors failed due to shared tensors. Loading state dict and manually handling shared parameters."
+                    )
+                    import torch
+                    from safetensors import safe_open
+                    
+                    # Load the safetensors file manually
+                    state_dict = {}
+                    with safe_open(model_file, framework="pt", device=map_location) as f:
+                        for key in f.keys():
+                            state_dict[key] = f.get_tensor(key)
+                    
+                    # Create a mapping to resolve shared tensor conflicts
+                    # For text encoder weights, prefer the base encoder names over component-specific ones
+                    resolved_state_dict = {}
+                    shared_tensors = {}
+                    
+                    for key, tensor in state_dict.items():
+                        # Check if this tensor is already seen (shared)
+                        tensor_id = id(tensor.storage())
+                        if tensor_id in shared_tensors:
+                            # This is a shared tensor, decide which key to keep
+                            existing_key = shared_tensors[tensor_id]
+                            # Prefer shorter, more generic names (e.g., encoder_actor over critic_target._orig_mod)
+                            if len(key) < len(existing_key) or "encoder_" in key:
+                                # Replace with the new key
+                                del resolved_state_dict[existing_key]
+                                resolved_state_dict[key] = tensor
+                                shared_tensors[tensor_id] = key
+                            # else keep the existing key
+                        else:
+                            resolved_state_dict[key] = tensor
+                            shared_tensors[tensor_id] = key
+                    
+                    # Load the resolved state dict
+                    model.load_state_dict(resolved_state_dict, strict=strict)
+            else:
+                raise e
         return model
 
     # def generate_model_card(self, *args, **kwargs) -> ModelCard:

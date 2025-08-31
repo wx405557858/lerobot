@@ -9,14 +9,14 @@
     "log_freq": 1,
     "save_checkpoint": true,
     "save_freq": 2000,
-    "pretrained_policy_name_or_path": null,
+    "pretrained_policy_name_or_path": "/home/shaoxiong/Code/lerobot/outputs/train/2025-08-30/22-28-24_default/checkpoints/0004000/pretrained_model",
     "wandb": {
         "enable": true,
         "project": "test_franka_sim",
         "disable_artifact": true
     },
     "dataset": {
-        "repo_id": "wx405557858/pick_ring_env_8",
+        "repo_id": "wx405557858/pick_ring_env_9",
         "use_imagenet_stats": false
     },
     "policy": {
@@ -209,7 +209,7 @@
     },
     "name": "franka_sim",
     "mode": null,
-    "repo_id": "wx405557858/pick_ring_env_7",
+    "repo_id": "wx405557858/pick_ring_env_9",
     "dataset_root": null,
     "task": "InterbotixPickEnv-v0",
     "num_episodes": 30,
