@@ -367,7 +367,13 @@ def get_hf_features_from_features(features: dict) -> datasets.Features:
             continue
         elif ft["dtype"] == "image":
             hf_features[key] = datasets.Image()
+        elif ft["dtype"] == "string":
+            # Handle string features (like text prompts)
+            hf_features[key] = datasets.Value(dtype="string")
         elif ft["shape"] == (1,):
+            hf_features[key] = datasets.Value(dtype=ft["dtype"])
+        elif ft["shape"] == () or ft["shape"] == []:
+            # Handle scalar values (empty shape)
             hf_features[key] = datasets.Value(dtype=ft["dtype"])
         elif len(ft["shape"]) == 1:
             hf_features[key] = datasets.Sequence(

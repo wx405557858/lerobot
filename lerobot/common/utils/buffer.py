@@ -570,8 +570,8 @@ class ReplayBuffer:
             for key in self.complementary_info_keys:
                 sample_val = self.complementary_info[key][0]
                 if isinstance(sample_val, str):
-                    # Handle string values - use string feature type
-                    features[f"complementary_info.{key}"] = {"dtype": "string", "shape": []}
+                    # Handle string values - use string feature type with proper shape
+                    features[f"complementary_info.{key}"] = {"dtype": "string", "shape": ()}
                 else:
                     if isinstance(sample_val, torch.Tensor) and sample_val.ndim == 0:
                         sample_val = sample_val.unsqueeze(0)

@@ -686,16 +686,47 @@ class SACObservationEncoder(nn.Module):
             obs: Dictionary of observations containing text data
 
         Returns:
-            Tensor: The encoded text features.
+            Tensor: The encoded text features with correct batch dimension.
         """
         # Get text prompt from observations
         text_prompt = obs.get("task", obs.get("text_prompt", ""))
         
-        # Handle both string and batch of strings
+        # Get batch size from other observations
+        batch_size = None
+        for key, value in obs.items():
+            if isinstance(value, torch.Tensor) and value.dim() > 0:
+                batch_size = value.shape[0]
+                break
+        
+        if batch_size is None:
+            batch_size = 1
+        
+        # Handle different input types
         if isinstance(text_prompt, str):
-            text_prompts = [text_prompt]
+            # Single string: repeat for entire batch
+            text_prompts = [text_prompt] * batch_size
+        elif isinstance(text_prompt, list):
+            # List of strings: ensure it matches batch size
+            if len(text_prompt) == 1:
+                text_prompts = text_prompt * batch_size
+            elif len(text_prompt) == batch_size:
+                text_prompts = text_prompt
+            else:
+                # Fallback: use first prompt and repeat
+                text_prompts = [text_prompt[0]] * batch_size
+        elif isinstance(text_prompt, torch.Tensor):
+            # If it's a tensor of strings, convert to list
+            if text_prompt.dim() == 0:
+                # Single item tensor
+                text_prompts = [str(text_prompt.item())] * batch_size
+            else:
+                # Batch of strings
+                text_prompts = [str(item) for item in text_prompt.tolist()]
+                if len(text_prompts) != batch_size:
+                    text_prompts = [text_prompts[0]] * batch_size
         else:
-            text_prompts = text_prompt if isinstance(text_prompt, list) else [str(text_prompt)]
+            # Fallback: use default task
+            text_prompts = ["pick up the object"] * batch_size
         
         # Tokenize text
         device = next(self.text_encoder.parameters()).device

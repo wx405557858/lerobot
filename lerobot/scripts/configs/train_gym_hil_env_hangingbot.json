@@ -9,14 +9,14 @@
     "log_freq": 1,
     "save_checkpoint": true,
     "save_freq": 2000,
-    "pretrained_policy_name_or_path": "/home/shaoxiong/Code/lerobot/outputs/train/2025-08-22/21-16-18_default/checkpoints/0014000/pretrained_model",
+    "pretrained_policy_name_or_path": null,
     "wandb": {
         "enable": true,
         "project": "test_franka_sim",
         "disable_artifact": true
     },
     "dataset": {
-        "repo_id": "wx405557858/pick_ring_env_7",
+        "repo_id": "wx405557858/pick_ring_env_8",
         "use_imagenet_stats": false
     },
     "policy": {
