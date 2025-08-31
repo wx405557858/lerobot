@@ -129,6 +129,14 @@ class SACConfig(PreTrainedConfig):
     freeze_vision_encoder: bool = True
     # Hidden dimension size for the image encoder
     image_encoder_hidden_dim: int = 32
+    # Whether to use text prompts as input
+    use_text_prompt: bool = False
+    # Name of the text encoder model (e.g., "openai/clip-vit-base-patch32")
+    text_encoder_name: str = "openai/clip-vit-base-patch32"
+    # Whether to freeze the text encoder during training
+    freeze_text_encoder: bool = True
+    # Dimension of the text embeddings
+    text_embedding_dim: int = 512
     # Whether to use a shared encoder for actor and critic
     shared_encoder: bool = True
     # Number of discrete actions, eg for gripper actions
@@ -222,10 +230,11 @@ class SACConfig(PreTrainedConfig):
     def validate_features(self) -> None:
         has_image = any(is_image_feature(key) for key in self.input_features)
         has_state = OBS_STATE in self.input_features
+        has_text = self.use_text_prompt
 
-        if not (has_state or has_image):
+        if not (has_state or has_image or has_text):
             raise ValueError(
-                "You must provide either 'observation.state' or an image observation (key starting with 'observation.image') in the input features"
+                "You must provide either 'observation.state', an image observation (key starting with 'observation.image'), or enable text prompts in the input features"
             )
 
         if "action" not in self.output_features:

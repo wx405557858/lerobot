@@ -501,6 +501,7 @@ class SACObservationEncoder(nn.Module):
         self.input_normalization = input_normalizer
         self._init_image_layers()
         self._init_state_layers()
+        self._init_text_layers()
         self._compute_output_dim()
 
     def _init_image_layers(self) -> None:
@@ -560,6 +561,28 @@ class SACObservationEncoder(nn.Module):
                 nn.Tanh(),
             )
 
+    def _init_text_layers(self) -> None:
+        self.has_text = self.config.use_text_prompt
+        if not self.has_text:
+            return
+
+        # Initialize CLIP text encoder
+        from transformers import CLIPTextModel, CLIPTokenizer
+        
+        self.text_tokenizer = CLIPTokenizer.from_pretrained(self.config.text_encoder_name)
+        self.text_encoder = CLIPTextModel.from_pretrained(self.config.text_encoder_name)
+        
+        if self.config.freeze_text_encoder:
+            for param in self.text_encoder.parameters():
+                param.requires_grad = False
+        
+        # Project text embeddings to latent dimension
+        self.text_projection = nn.Sequential(
+            nn.Linear(self.config.text_embedding_dim, self.config.latent_dim),
+            nn.LayerNorm(self.config.latent_dim),
+            nn.Tanh(),
+        )
+
     def _compute_output_dim(self) -> None:
         out = 0
         if self.has_images:
@@ -567,6 +590,8 @@ class SACObservationEncoder(nn.Module):
         if self.has_env:
             out += self.config.latent_dim
         if self.has_state:
+            out += self.config.latent_dim
+        if self.has_text:
             out += self.config.latent_dim
         self._out_dim = out
 
@@ -583,11 +608,13 @@ class SACObservationEncoder(nn.Module):
             parts.append(self.env_encoder(obs["observation.environment_state"]))
         if self.has_state:
             parts.append(self.state_encoder(obs["observation.state"]))
+        if self.has_text:
+            parts.append(self._encode_text(obs))
         if parts:
             return torch.cat(parts, dim=-1)
 
         raise ValueError(
-            "No parts to concatenate, you should have at least one image or environment state or state"
+            "No parts to concatenate, you should have at least one image or environment state or state or text"
         )
 
     def get_cached_image_features(self, obs: dict[str, Tensor], normalize: bool = False) -> dict[str, Tensor]:
@@ -651,6 +678,43 @@ class SACObservationEncoder(nn.Module):
                 x = x.detach()
             feats.append(x)
         return torch.cat(feats, dim=-1)
+
+    def _encode_text(self, obs: dict[str, Tensor]) -> Tensor:
+        """Encode text observations using CLIP text encoder.
+
+        Args:
+            obs: Dictionary of observations containing text data
+
+        Returns:
+            Tensor: The encoded text features.
+        """
+        # Get text prompt from observations
+        text_prompt = obs.get("task", obs.get("text_prompt", ""))
+        
+        # Handle both string and batch of strings
+        if isinstance(text_prompt, str):
+            text_prompts = [text_prompt]
+        else:
+            text_prompts = text_prompt if isinstance(text_prompt, list) else [str(text_prompt)]
+        
+        # Tokenize text
+        device = next(self.text_encoder.parameters()).device
+        inputs = self.text_tokenizer(
+            text_prompts, 
+            return_tensors="pt", 
+            padding=True, 
+            truncation=True,
+            max_length=77  # CLIP's max sequence length
+        ).to(device)
+        
+        # Encode text
+        with torch.no_grad() if self.config.freeze_text_encoder else torch.enable_grad():
+            text_features = self.text_encoder(**inputs).pooler_output
+        
+        # Project to latent dimension
+        text_features = self.text_projection(text_features)
+        
+        return text_features
 
     @property
     def output_dim(self) -> int:

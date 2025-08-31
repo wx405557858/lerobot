@@ -108,6 +108,10 @@
                 ]
             }
         },
+        "use_text_prompt": true,
+        "text_encoder_name": "openai/clip-vit-base-patch32",
+        "freeze_text_encoder": true,
+        "text_embedding_dim": 512,
         "storage_device": "cpu",
         "vision_encoder_name": "helper2424/resnet10",
         "freeze_vision_encoder": true,
