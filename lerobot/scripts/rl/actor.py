@@ -58,6 +58,8 @@ from torch import nn
 from torch.multiprocessing import Event, Queue
 
 from lerobot.common.cameras import opencv  # noqa: F401
+from lerobot.common.datasets.factory import make_dataset
+from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.common.policies.factory import make_policy
 from lerobot.common.policies.sac.modeling_sac import SACPolicy
 from lerobot.common.robots import so100_follower  # noqa: F401
@@ -249,9 +251,11 @@ def act_with_policy(
     ### Instantiate the policy in both the actor and learner processes
     ### To avoid sending a SACPolicy object through the port, we create a policy instance
     ### on both sides, the learner sends the updated parameters every n steps to update the actor's parameters
+    dataset: LeRobotDataset = make_dataset(cfg)
     policy: SACPolicy = make_policy(
         cfg=cfg.policy,
         env_cfg=cfg.env,
+        ds_meta=dataset.meta,
     )
     policy = policy.eval()
     assert isinstance(policy, nn.Module)
@@ -273,11 +277,14 @@ def act_with_policy(
         if shutdown_event.is_set():
             logging.info("[ACTOR] Shutting down act_with_policy")
             return
+        
+        obs_with_task = obs.copy()
+        obs_with_task["task"] = [info["text_prompt"]]
 
         if interaction_step >= cfg.policy.online_step_before_learning:
             # Time policy inference and check if it meets FPS requirement
             with policy_timer:
-                action = policy.select_action(batch=obs)
+                action = policy.select_action(batch=obs_with_task)
             policy_fps = policy_timer.fps_last
             print(f"policy_fps {policy_fps}")
 
@@ -288,6 +295,7 @@ def act_with_policy(
         
         print(f"action {action}")
 
+        action = torch.Tensor([0, 0, 0, 1])
         next_obs, reward, done, truncated, info = online_env.step(action)
 
         sum_reward_episode += float(reward)

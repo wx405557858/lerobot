@@ -316,9 +316,11 @@ def add_actor_information_and_train(
     if cfg.pretrained_policy_name_or_path is not None:
         policy = SACPolicy.from_pretrained(cfg.pretrained_policy_name_or_path)
     else:
+        dataset: LeRobotDataset = make_dataset(cfg)
         policy: SACPolicy = make_policy(
             cfg=cfg.policy,
             env_cfg=cfg.env,
+            ds_meta=dataset.meta,
         )
 
     assert isinstance(policy, nn.Module)
@@ -432,6 +434,7 @@ def add_actor_information_and_train(
                 "observation_feature": observation_features,
                 "next_observation_feature": next_observation_features,
                 "complementary_info": batch["complementary_info"],
+                "task": batch["task"],
             }
 
             # Use the forward method for critic loss
@@ -490,6 +493,7 @@ def add_actor_information_and_train(
             "done": done,
             "observation_feature": observation_features,
             "next_observation_feature": next_observation_features,
+            "task": batch["task"],
         }
 
         critic_output = policy.forward(forward_batch, model="critic")
@@ -1048,7 +1052,7 @@ def get_observation_features(
         tuple: observation_features, next_observation_features
     """
 
-    if policy.config.vision_encoder_name is None or not policy.config.freeze_vision_encoder:
+    if policy.config.vision_encoder_name is None or not policy.config.freeze_vision_encoder or policy.config.use_smolvla:
         return None, None
 
     with torch.no_grad():

@@ -129,6 +129,7 @@ class SACConfig(PreTrainedConfig):
     freeze_vision_encoder: bool = True
     # Hidden dimension size for the image encoder
     image_encoder_hidden_dim: int = 32
+    use_smolvla: bool = True
     # Whether to use text prompts as input
     use_text_prompt: bool = False
     # Name of the text encoder model (e.g., "openai/clip-vit-base-patch32")

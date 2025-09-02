@@ -524,6 +524,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
         if len(tasks) == 1:
             tasks = [tasks[0] for _ in range(batch[OBS_STATE].shape[0])]
 
+        tasks = ["" if task is None else task for task in tasks]
         tasks = [task if task.endswith("\n") else f"{task}\n" for task in tasks]
 
         tokenized_prompt = self.language_tokenizer.__call__(

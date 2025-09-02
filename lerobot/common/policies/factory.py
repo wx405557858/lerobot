@@ -126,7 +126,8 @@ def make_policy(
     Returns:
         PreTrainedPolicy: _description_
     """
-    if bool(ds_meta) == bool(env_cfg):
+    print(f"ds_meta: {ds_meta}, env_cfg: {env_cfg}")
+    if not bool(ds_meta) and not bool(env_cfg):
         raise ValueError("Either one of a dataset metadata or a sim env must be provided.")
 
     # NOTE: Currently, if you try to run vqbet with mps backend, you'll get this error.
@@ -160,6 +161,8 @@ def make_policy(
     cfg.output_features = {key: ft for key, ft in features.items() if ft.type is FeatureType.ACTION}
     cfg.input_features = {key: ft for key, ft in features.items() if key not in cfg.output_features}
     kwargs["config"] = cfg
+    if cfg.type == "sac":
+        kwargs["ds_meta"] = ds_meta
 
     if cfg.pretrained_path:
         # Load a pretrained policy and override the config if needed (for example, if there are inference-time

@@ -27,9 +27,11 @@ import torch.nn.functional as F  # noqa: N812
 from torch import Tensor
 from torch.distributions import MultivariateNormal, TanhTransform, Transform, TransformedDistribution
 
+from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata
 from lerobot.common.policies.normalize import NormalizeBuffer
 from lerobot.common.policies.pretrained import PreTrainedPolicy
 from lerobot.common.policies.sac.configuration_sac import SACConfig, is_image_feature
+from lerobot.common.policies.sac.observation_encoder_smolvla import SACSmolVLAObservationEncoder
 from lerobot.common.policies.utils import get_device_from_parameters
 
 DISCRETE_DIMENSION_INDEX = -1  # Gripper is always the last dimension
@@ -45,10 +47,12 @@ class SACPolicy(
         self,
         config: SACConfig | None = None,
         dataset_stats: dict[str, dict[str, Tensor]] | None = None,
+        ds_meta: LeRobotDatasetMetadata | None = None,
     ):
         super().__init__(config)
         config.validate_features()
         self.config = config
+        self.ds_meta = ds_meta
 
         # Determine action dimension and initialize all components
         continuous_action_dim = config.output_features["action"].shape[0]
@@ -82,7 +86,7 @@ class SACPolicy(
         """Select action for inference/evaluation"""
 
         observations_features = None
-        if self.shared_encoder and self.actor.encoder.has_images:
+        if self.shared_encoder and self.actor.encoder.has_images and not self.config.use_smolvla:
             # Cache and normalize image features
             observations_features = self.actor.encoder.get_cached_image_features(batch, normalize=True)
 
@@ -165,12 +169,14 @@ class SACPolicy(
         # Extract common components from batch
         actions: Tensor = batch["action"]
         observations: dict[str, Tensor] = batch["state"]
+        observations["task"] = batch["task"]
         observation_features: Tensor = batch.get("observation_feature")
 
         if model == "critic":
             # Extract critic-specific components
             rewards: Tensor = batch["reward"]
             next_observations: dict[str, Tensor] = batch["next_state"]
+            next_observations["task"] = batch["task"]
             done: Tensor = batch["done"]
             next_observation_features: Tensor = batch.get("next_observation_feature")
 
@@ -413,12 +419,21 @@ class SACPolicy(
     def _init_encoders(self):
         """Initialize shared or separate encoders for actor and critic."""
         self.shared_encoder = self.config.shared_encoder
-        self.encoder_critic = SACObservationEncoder(self.config, self.normalize_inputs)
-        self.encoder_actor = (
-            self.encoder_critic
-            if self.shared_encoder
-            else SACObservationEncoder(self.config, self.normalize_inputs)
-        )
+        if self.config.use_smolvla:
+            self.encoder_critic = SACSmolVLAObservationEncoder(self.config, self.normalize_inputs, self.ds_meta)
+            self.encoder_actor = (
+                self.encoder_critic
+                if self.shared_encoder
+                else SACSmolVLAObservationEncoder(self.config, self.normalize_inputs, self.ds_meta
+                )
+            )
+        else:
+            self.encoder_critic = SACObservationEncoder(self.config, self.normalize_inputs)
+            self.encoder_actor = (
+                self.encoder_critic
+                if self.shared_encoder
+                else SACObservationEncoder(self.config, self.normalize_inputs)
+            )
 
     def _init_critics(self, continuous_action_dim):
         """Build critic ensemble, targets, and optional discrete critic."""
@@ -601,7 +616,7 @@ class SACObservationEncoder(nn.Module):
         obs = self.input_normalization(obs)
         parts = []
         if self.has_images:
-            if cache is None:
+            if cache is None and not self.config.use_smolvla:
                 cache = self.get_cached_image_features(obs, normalize=False)
             parts.append(self._encode_images(cache, detach))
         if self.has_env:
@@ -689,8 +704,9 @@ class SACObservationEncoder(nn.Module):
             Tensor: The encoded text features with correct batch dimension.
         """
         # Get text prompt from observations
-        text_prompt = obs.get("task", obs.get("text_prompt", ""))
-        
+        # text_prompt = obs.get("task", obs.get("text_prompt", ""))
+        text_prompt = obs["task"]
+
         # Get batch size from other observations
         batch_size = None
         for key, value in obs.items():
@@ -874,7 +890,7 @@ class CriticEnsemble(nn.Module):
     ) -> torch.Tensor:
         device = get_device_from_parameters(self)
         # Move each tensor in observations to device
-        observations = {k: v.to(device) for k, v in observations.items()}
+        observations = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in observations.items()}
         # NOTE: We normalize actions it helps for sample efficiency
         actions: dict[str, torch.tensor] = {"action": actions}
         # NOTE: Normalization layer took dict in input and outputs a dict that why
