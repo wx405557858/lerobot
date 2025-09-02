@@ -427,7 +427,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
         return self._queues[ACTION].popleft()
 
 
-    def forward_embedding(self, batch: dict[str, Tensor], noise=None, time=None) -> Tensor:
+    def forward_embeddings(self, batch: dict[str, Tensor], noise=None, time=None) -> Tensor:
         """Do a full training forward pass to compute the loss"""
         batch = self.normalize_inputs(batch)
         batch = self.normalize_targets(batch)
@@ -438,6 +438,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
         batch["action"] = torch.ones((state.shape[0], self.config.n_action_steps, self.config.max_action_dim), device=state.device)
         actions = self.prepare_action(batch)
         embeddings = self.model.forward_embeddings(images, img_masks, lang_tokens, lang_masks, state, actions, noise, time)
+        embeddings = embeddings.reshape(embeddings.shape[0], -1)
         return embeddings
 
     def forward(self, batch: dict[str, Tensor], noise=None, time=None) -> dict[str, Tensor]:

@@ -59,7 +59,11 @@ def test_select_action_pick_ring():
         print(f"Dataset metadata:")
         print(f"  Action keys: {dataset.meta.names.get('action', [])}")
         print(f"  Action shape: {dataset.meta.shapes.get('action', 'Unknown')}")
-        
+
+        for name, param in policy.named_parameters():
+            print(f"Policy parameter '{name}' requires_grad: {param.requires_grad}, shape: {param.shape}")
+
+        print(f"total parameters trainable: {sum(p.numel() for p in policy.parameters() if p.requires_grad)}")
         # 3. Prepare observation batch
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
         batch = next(iter(dataloader))
@@ -81,7 +85,7 @@ def test_select_action_pick_ring():
         policy.eval()
         with torch.no_grad():
             # actions = policy.select_action(obs_batch)
-            actions = policy.forward_embedding(obs_batch)
+            actions = policy.forward_embeddings(obs_batch)
             print(f"✅ Action selection successful!")
             print(f"Actions: {actions}")
             print(f"Action shape: {actions.shape}")
