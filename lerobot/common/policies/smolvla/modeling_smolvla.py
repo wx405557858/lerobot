@@ -354,7 +354,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
         )
 
         self.language_tokenizer = AutoProcessor.from_pretrained(self.config.vlm_model_name).tokenizer
-        self.model = VLAFlowMatching(config)
+        self.model: VLAFlowMatching = VLAFlowMatching(config)
         self.reset()
 
     def reset(self):
@@ -425,6 +425,20 @@ class SmolVLAPolicy(PreTrainedPolicy):
             # effectively has shape (n_action_steps, batch_size, *), hence the transpose.
             self._queues[ACTION].extend(actions.transpose(0, 1)[: self.config.n_action_steps])
         return self._queues[ACTION].popleft()
+
+
+    def forward_embedding(self, batch: dict[str, Tensor], noise=None, time=None) -> Tensor:
+        """Do a full training forward pass to compute the loss"""
+        batch = self.normalize_inputs(batch)
+        batch = self.normalize_targets(batch)
+        images, img_masks = self.prepare_images(batch)
+        state = self.prepare_state(batch)
+        lang_tokens, lang_masks = self.prepare_language(batch)
+        # Dummy actions for obtaining the embeddings
+        batch["action"] = torch.ones((state.shape[0], self.config.n_action_steps, self.config.max_action_dim), device=state.device)
+        actions = self.prepare_action(batch)
+        embeddings = self.model.forward_embeddings(images, img_masks, lang_tokens, lang_masks, state, actions, noise, time)
+        return embeddings
 
     def forward(self, batch: dict[str, Tensor], noise=None, time=None) -> dict[str, Tensor]:
         """Do a full training forward pass to compute the loss"""
@@ -843,6 +857,43 @@ class VLAFlowMatching(nn.Module):
         v_t = self.action_out_proj(suffix_out)
         losses = F.mse_loss(u_t, v_t, reduction="none")
         return losses
+
+    def forward_embeddings(
+        self, images, img_masks, lang_tokens, lang_masks, state, actions, noise=None, time=None
+    ) -> Tensor:
+        """Do a full training forward pass and compute the loss (batch_size x num_steps x num_motors)"""
+        if noise is None:
+            noise = self.sample_noise(actions.shape, actions.device) * 0.0 + 1.0
+
+        if time is None:
+            time = self.sample_time(actions.shape[0], actions.device) * 0.0 + 1.0
+
+        time_expanded = time[:, None, None]
+        # x_t = time_expanded * noise + (1 - time_expanded) * actions
+        x_t = noise
+        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
+            images, img_masks, lang_tokens, lang_masks, state=state
+        )
+        suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(x_t, time)
+
+        pad_masks = torch.cat([prefix_pad_masks, suffix_pad_masks], dim=1)
+        att_masks = torch.cat([prefix_att_masks, suffix_att_masks], dim=1)
+
+        att_2d_masks = make_att_2d_masks(pad_masks, att_masks)
+        position_ids = torch.cumsum(pad_masks, dim=1) - 1
+        (_, suffix_out), _ = self.vlm_with_expert.forward(
+            attention_mask=att_2d_masks,
+            position_ids=position_ids,
+            past_key_values=None,
+            inputs_embeds=[prefix_embs, suffix_embs],
+            use_cache=False,
+            fill_kv_cache=False,
+        )
+        suffix_out = suffix_out[:, -self.config.chunk_size :]
+        # Original openpi code, upcast attention output
+        suffix_out = suffix_out.to(dtype=torch.float32)
+        v_t = self.action_out_proj(suffix_out)
+        return v_t
 
     def sample_actions(self, images, img_masks, lang_tokens, lang_masks, state, noise=None) -> Tensor:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
