@@ -89,6 +89,8 @@ class SACPolicy(
         if self.shared_encoder and self.actor.encoder.has_images and not self.config.use_smolvla:
             # Cache and normalize image features
             observations_features = self.actor.encoder.get_cached_image_features(batch, normalize=True)
+        elif self.config.use_smolvla:
+            observations_features = self.actor.encoder.get_cached_embeddings(batch)
 
         actions, _, _ = self.actor(batch, observations_features)
 

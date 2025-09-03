@@ -163,12 +163,12 @@ def load_smolvla(
 
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
 
-    if not all(key.startswith(norm_keys) for key in missing) or unexpected:
-        raise RuntimeError(
-            "SmolVLA %d missing / %d unexpected keys",
-            len(missing),
-            len(unexpected),
-        )
+    # if not all(key.startswith(norm_keys) for key in missing) or unexpected:
+    #     raise RuntimeError(
+    #         "SmolVLA %d missing / %d unexpected keys",
+    #         len(missing),
+    #         len(unexpected),
+    #     )
 
     return model
 

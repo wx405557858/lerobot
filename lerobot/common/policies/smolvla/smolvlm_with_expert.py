@@ -165,8 +165,8 @@ class SmolVLMWithExpertModel(nn.Module):
                     params.requires_grad = False
         # To avoid unused params issue with distributed training
         for name, params in self.lm_expert.named_parameters():
-            if "lm_head" in name:
-                params.requires_grad = False
+            # if "lm_head" in name:
+            params.requires_grad = False
 
     def train(self, mode: bool = True):
         super().train(mode)

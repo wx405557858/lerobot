@@ -41,10 +41,16 @@ class SACSmolVLAObservationEncoder(nn.Module):
             chunk_size=1,
             n_action_steps=1,
             max_action_dim=32,
+            num_vlm_layers=4,
         )
         policy_path = "lerobot/smolvla_base"
         self.policy_config.pretrained_path = policy_path
         self.smolvla : SmolVLAPolicy = make_policy(cfg=self.policy_config, ds_meta=self.ds_meta)
+
+    def get_cached_embeddings(self, obs: dict[str, Tensor]) -> dict[str, Tensor]:
+        obs = self.input_normalization(obs)
+        embeddings = self.smolvla.forward_embeddings(obs)
+        return {"embeddings": embeddings}
 
     def _compute_output_dim(self) -> None:
         self._out_dim = self.policy_config.max_action_dim
@@ -52,6 +58,9 @@ class SACSmolVLAObservationEncoder(nn.Module):
     def forward(
         self, obs: dict[str, Tensor], cache: dict[str, Tensor] | None = None, detach: bool = False
     ) -> Tensor:
+        if "embeddings" in cache:
+            return cache["embeddings"]
+        
         obs = self.input_normalization(obs)
         embeddings = self.smolvla.forward_embeddings(obs)
 

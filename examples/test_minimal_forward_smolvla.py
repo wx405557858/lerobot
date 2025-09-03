@@ -38,6 +38,7 @@ def test_select_action_pick_ring():
             chunk_size=1,
             n_action_steps=1,
             max_action_dim=32,
+            num_vlm_layers=4,
         )
         policy_config.pretrained_path = policy_path
         
@@ -60,8 +61,8 @@ def test_select_action_pick_ring():
         print(f"  Action keys: {dataset.meta.names.get('action', [])}")
         print(f"  Action shape: {dataset.meta.shapes.get('action', 'Unknown')}")
 
-        for name, param in policy.named_parameters():
-            print(f"Policy parameter '{name}' requires_grad: {param.requires_grad}, shape: {param.shape}")
+        # for name, param in policy.named_parameters():
+        #     print(f"Policy parameter '{name}' requires_grad: {param.requires_grad}, shape: {param.shape}")
 
         print(f"total parameters trainable: {sum(p.numel() for p in policy.parameters() if p.requires_grad)}")
         # 3. Prepare observation batch

@@ -416,12 +416,16 @@ def add_actor_information_and_train(
             actions = batch["action"]
             rewards = batch["reward"]
             observations = batch["state"]
+            observations_with_task = observations.copy()
+            observations_with_task["task"] = batch["task"]
             next_observations = batch["next_state"]
+            next_observations_with_task = next_observations.copy()
+            next_observations_with_task["task"] = batch["task"]
             done = batch["done"]
             check_nan_in_transition(observations=observations, actions=actions, next_state=next_observations)
 
             observation_features, next_observation_features = get_observation_features(
-                policy=policy, observations=observations, next_observations=next_observations
+                policy=policy, observations=observations_with_task, next_observations=next_observations_with_task
             )
 
             # Create a batch dictionary with all required elements for the forward method
@@ -475,13 +479,17 @@ def add_actor_information_and_train(
         actions = batch["action"]
         rewards = batch["reward"]
         observations = batch["state"]
+        observations_with_task = observations.copy()
+        observations_with_task["task"] = batch["task"]
         next_observations = batch["next_state"]
+        next_observations_with_task = next_observations.copy()
+        next_observations_with_task["task"] = batch["task"]
         done = batch["done"]
 
         check_nan_in_transition(observations=observations, actions=actions, next_state=next_observations)
 
         observation_features, next_observation_features = get_observation_features(
-            policy=policy, observations=observations, next_observations=next_observations
+            policy=policy, observations=observations_with_task, next_observations=next_observations_with_task
         )
 
         # Create a batch dictionary with all required elements for the forward method
@@ -1052,8 +1060,14 @@ def get_observation_features(
         tuple: observation_features, next_observation_features
     """
 
-    if policy.config.vision_encoder_name is None or not policy.config.freeze_vision_encoder or policy.config.use_smolvla:
+    if policy.config.vision_encoder_name is None or not policy.config.freeze_vision_encoder:
         return None, None
+    
+    if policy.config.use_smolvla:
+        with torch.no_grad():
+            observation_features = policy.actor.encoder.get_cached_embeddings(observations)
+            next_observation_features = policy.actor.encoder.get_cached_embeddings(next_observations)
+            return observation_features, next_observation_features
 
     with torch.no_grad():
         observation_features = policy.actor.encoder.get_cached_image_features(observations, normalize=True)
