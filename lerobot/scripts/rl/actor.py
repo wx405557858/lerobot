@@ -295,7 +295,7 @@ def act_with_policy(
         
         print(f"action {action}")
 
-        action = torch.Tensor([0, 0, 0, 1])
+        # action = torch.Tensor([0, 0, 0, 1])
         next_obs, reward, done, truncated, info = online_env.step(action)
 
         sum_reward_episode += float(reward)
@@ -320,6 +320,7 @@ def act_with_policy(
                 done=done,
                 truncated=truncated,  # TODO: (azouitine) Handle truncation properly
                 complementary_info=info,
+                task=info.get("text_prompt", None)
             )
         )
         # assign obs to the next obs and continue the rollout
@@ -367,7 +368,9 @@ def act_with_policy(
 
         if cfg.env.fps is not None:
             dt_time = time.perf_counter() - start_time
+            print(f"dt_time {dt_time} s; current time {time.perf_counter()} s")
             busy_wait(1 / cfg.env.fps - dt_time)
+            print(f"after busy wait current time {time.perf_counter()} s")
 
 
 #################################################

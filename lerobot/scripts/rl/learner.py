@@ -313,10 +313,10 @@ def add_actor_information_and_train(
 
     logging.info("Initializing policy")
 
+    dataset: LeRobotDataset = make_dataset(cfg)
     if cfg.pretrained_policy_name_or_path is not None:
-        policy = SACPolicy.from_pretrained(cfg.pretrained_policy_name_or_path)
+        policy = SACPolicy.from_pretrained(cfg.pretrained_policy_name_or_path, ds_meta=dataset.meta)
     else:
-        dataset: LeRobotDataset = make_dataset(cfg)
         policy: SACPolicy = make_policy(
             cfg=cfg.policy,
             env_cfg=cfg.env,
@@ -1064,10 +1064,11 @@ def get_observation_features(
         return None, None
     
     if policy.config.use_smolvla:
-        with torch.no_grad():
-            observation_features = policy.actor.encoder.get_cached_embeddings(observations)
-            next_observation_features = policy.actor.encoder.get_cached_embeddings(next_observations)
-            return observation_features, next_observation_features
+        return None, None
+        # # with torch.no_grad():
+        #     observation_features = policy.actor.encoder.get_cached_embeddings(observations)
+        #     next_observation_features = policy.actor.encoder.get_cached_embeddings(next_observations)
+        #     return observation_features, next_observation_features
 
     with torch.no_grad():
         observation_features = policy.actor.encoder.get_cached_image_features(observations, normalize=True)
@@ -1183,7 +1184,10 @@ def process_transitions(
             ):
                 logging.warning("[LEARNER] NaN detected in transition, skipping")
                 continue
-
+            
+            if transition["task"] is None:
+                if "text_prompt" in transition["complementary_info"]:
+                    transition["task"] = transition["complementary_info"]["text_prompt"]
             replay_buffer.add(**transition)
 
             # Add to offline buffer if it's an intervention

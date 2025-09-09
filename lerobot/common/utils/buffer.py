@@ -497,7 +497,7 @@ class ReplayBuffer:
                 and first_transition["complementary_info"] is not None
             ):
                 first_complementary_info = {
-                    k: v.to(device) for k, v in first_transition["complementary_info"].items()
+                    k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in first_transition["complementary_info"].items()
                 }
 
             replay_buffer._initialize_storage(
@@ -509,7 +509,7 @@ class ReplayBuffer:
             for k, v in data.items():
                 if isinstance(v, dict):
                     for key, tensor in v.items():
-                        v[key] = tensor.to(storage_device)
+                        v[key] = tensor.to(storage_device) if isinstance(tensor, torch.Tensor) else tensor
                 elif isinstance(v, torch.Tensor):
                     data[k] = v.to(storage_device)
 
@@ -876,7 +876,10 @@ def concatenate_batch_transitions(
             # Concatenate each field
             for key in right_info:
                 if key in left_info:
-                    left_info[key] = torch.cat([left_info[key], right_info[key]], dim=0)
+                    if isinstance(left_info[key], torch.Tensor) and isinstance(right_info[key], torch.Tensor):
+                        left_info[key] = torch.cat([left_info[key], right_info[key]], dim=0)
+                    elif isinstance(left_info[key], list) and isinstance(right_info[key], list):
+                        left_info[key] = left_info[key] + right_info[key]
                 else:
                     left_info[key] = right_info[key]
 

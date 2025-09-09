@@ -129,7 +129,7 @@ class SACConfig(PreTrainedConfig):
     freeze_vision_encoder: bool = True
     # Hidden dimension size for the image encoder
     image_encoder_hidden_dim: int = 32
-    use_smolvla: bool = True
+    use_smolvla: bool = False
     # Whether to use text prompts as input
     use_text_prompt: bool = False
     # Name of the text encoder model (e.g., "openai/clip-vit-base-patch32")
@@ -193,6 +193,7 @@ class SACConfig(PreTrainedConfig):
     use_backup_entropy: bool = True
     # Gradient clipping norm for the SAC algorithm
     grad_clip_norm: float = 40.0
+    use_spatial_encoder: bool = True
 
     # Network configuration
     # Configuration for the critic network architecture

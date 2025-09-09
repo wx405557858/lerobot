@@ -535,28 +535,35 @@ class SACObservationEncoder(nn.Module):
         if self.config.freeze_vision_encoder:
             freeze_image_encoder(self.image_encoder)
 
-        dummy = torch.zeros(1, *self.config.input_features[self.image_keys[0]].shape)
-        with torch.no_grad():
-            _, channels, height, width = self.image_encoder(dummy).shape
+        if self.config.use_spatial_encoder:
+            dummy = torch.zeros(1, *self.config.input_features[self.image_keys[0]].shape)
+            with torch.no_grad():
+                _, channels, height, width = self.image_encoder(dummy).shape
 
-        self.spatial_embeddings = nn.ModuleDict()
-        self.post_encoders = nn.ModuleDict()
+            self.spatial_embeddings = nn.ModuleDict()
+            self.post_encoders = nn.ModuleDict()
 
-        for key in self.image_keys:
-            name = key.replace(".", "_")
-            self.spatial_embeddings[name] = SpatialLearnedEmbeddings(
-                height=height,
-                width=width,
-                channel=channels,
-                num_features=self.config.image_embedding_pooling_dim,
-            )
-            self.post_encoders[name] = nn.Sequential(
-                nn.Dropout(0.1),
-                nn.Linear(
-                    in_features=channels * self.config.image_embedding_pooling_dim,
-                    out_features=self.config.latent_dim,
-                ),
-                nn.LayerNorm(normalized_shape=self.config.latent_dim),
+            for key in self.image_keys:
+                name = key.replace(".", "_")
+                self.spatial_embeddings[name] = SpatialLearnedEmbeddings(
+                    height=height,
+                    width=width,
+                    channel=channels,
+                    num_features=self.config.image_embedding_pooling_dim,
+                )
+                self.post_encoders[name] = nn.Sequential(
+                    nn.Dropout(0.1),
+                    nn.Linear(
+                        in_features=channels * self.config.image_embedding_pooling_dim,
+                        out_features=self.config.latent_dim,
+                    ),
+                    nn.LayerNorm(normalized_shape=self.config.latent_dim),
+                    nn.Tanh(),
+                )
+        else:
+            self.image_projection = nn.Sequential(
+                nn.Linear(self.image_encoder.image_enc_out_shape, self.config.latent_dim),
+                nn.LayerNorm(self.config.latent_dim),
                 nn.Tanh(),
             )
 
@@ -585,10 +592,10 @@ class SACObservationEncoder(nn.Module):
 
         # Initialize CLIP text encoder
         from transformers import CLIPTextModel, CLIPTokenizer
-        
+
         self.text_tokenizer = CLIPTokenizer.from_pretrained(self.config.text_encoder_name)
         self.text_encoder = CLIPTextModel.from_pretrained(self.config.text_encoder_name)
-        
+
         if self.config.freeze_text_encoder:
             for param in self.text_encoder.parameters():
                 param.requires_grad = False
@@ -664,7 +671,7 @@ class SACObservationEncoder(nn.Module):
         Returns:
             Dictionary mapping image keys to their corresponding encoded features
         """
-        if normalize:
+        if normalize and not self.config.vision_encoder_name == "openai/clip-vit-base-patch32":
             obs = self.input_normalization(obs)
         batched = torch.cat([obs[k] for k in self.image_keys], dim=0)
         out = self.image_encoder(batched)
@@ -688,6 +695,12 @@ class SACObservationEncoder(nn.Module):
         """
         feats = []
         for k, feat in cache.items():
+            if not self.config.use_spatial_encoder:
+                x = self.image_projection(feat)
+                if detach:
+                    x = x.detach()
+                feats.append(x)
+                continue
             safe_key = k.replace(".", "_")
             x = self.spatial_embeddings[safe_key](feat)
             x = self.post_encoders[safe_key](x)
@@ -1091,10 +1104,19 @@ def freeze_image_encoder(image_encoder: nn.Module):
 class PretrainedImageEncoder(nn.Module):
     def __init__(self, config: SACConfig):
         super().__init__()
+        self.config = config
 
         self.image_enc_layers, self.image_enc_out_shape = self._load_pretrained_vision_encoder(config)
 
     def _load_pretrained_vision_encoder(self, config: SACConfig):
+        if config.vision_encoder_name == "openai/clip-vit-base-patch32":
+            from transformers import CLIPProcessor, CLIPModel
+            self.model = CLIPModel.from_pretrained(config.vision_encoder_name).to(config.device)
+            self.processor = CLIPProcessor.from_pretrained(config.vision_encoder_name)
+            self.image_enc_out_shape = self.model.visual_projection.out_features
+            print(f"loaded CLIP model with image embedding dim {self.image_enc_out_shape}")
+            return self.model.vision_model, self.image_enc_out_shape
+        
         """Set up CNN encoder"""
         from transformers import AutoModel
 
@@ -1109,7 +1131,12 @@ class PretrainedImageEncoder(nn.Module):
         return self.image_enc_layers, self.image_enc_out_shape
 
     def forward(self, x):
-        enc_feat = self.image_enc_layers(x).last_hidden_state
+        if self.config.vision_encoder_name == "openai/clip-vit-base-patch32":
+            x = x*255.0  # CLIP expects inputs in [0, 255]
+            image_inputs = self.processor(images=x, return_tensors="pt").to(self.config.device)
+            enc_feat = self.model.get_image_features(**image_inputs)
+        else:
+            enc_feat = self.image_enc_layers(x).last_hidden_state
         return enc_feat
 
 
