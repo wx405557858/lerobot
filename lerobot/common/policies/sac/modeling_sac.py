@@ -505,7 +505,7 @@ class SACPolicy(
     def _init_temperature(self):
         """Set up temperature parameter and initial log_alpha."""
         temp_init = self.config.temperature_init
-        self.log_alpha = nn.Parameter(torch.tensor([math.log(temp_init)]))
+        self.log_alpha = nn.Parameter(torch.tensor([math.log(temp_init)]).to(self.config.device))
         self.temperature = self.log_alpha.exp().item()
 
 

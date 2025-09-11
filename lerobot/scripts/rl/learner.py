@@ -325,6 +325,7 @@ def add_actor_information_and_train(
 
     assert isinstance(policy, nn.Module)
 
+    policy._init_temperature()
     policy.train()
 
     push_actor_policy_to_queue(parameters_queue=parameters_queue, policy=policy)
