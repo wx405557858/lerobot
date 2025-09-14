@@ -519,7 +519,50 @@ class SACObservationEncoder(nn.Module):
         self._init_image_layers()
         self._init_state_layers()
         self._init_text_layers()
+        self._init_attention_layers()
         self._compute_output_dim()
+    
+    def _init_attention_layers(self) -> None:
+        if not self.config.use_attention_encoder:
+            return
+
+        self.attention_layers = nn.ModuleList()
+        self.attention_layer_norms = nn.ModuleList()
+        self.ffn_layers = nn.ModuleList()
+        self.ffn_layer_norms = nn.ModuleList()
+        for _ in range(self.config.num_attention_layers):
+            self.attention_layers.append(
+                nn.MultiheadAttention(
+                    embed_dim=self.config.latent_dim,
+                    num_heads=self.config.num_attention_heads,
+                )
+            )
+            self.attention_layer_norms.append(nn.LayerNorm(self.config.latent_dim))
+            self.ffn_layers.append(
+                nn.Sequential(
+                    nn.Linear(self.config.latent_dim, 4 * self.config.latent_dim),
+                    nn.ReLU(),
+                    nn.Linear(4 * self.config.latent_dim, self.config.latent_dim),
+                    nn.ReLU(),
+                )
+            )
+            self.ffn_layer_norms.append(nn.LayerNorm(self.config.latent_dim))
+
+        num_embeddings = self.compute_num_embedings()
+        self.attention_positional_embeddings = nn.Parameter(torch.randn(1, num_embeddings, self.config.latent_dim))
+        nn.init.trunc_normal_(self.attention_positional_embeddings, std=0.02)
+    
+    def compute_num_embedings(self) -> int:
+        num_embeddings = 0
+        if self.has_images:
+            num_embeddings += len(self.image_keys)
+        if self.has_env:
+            num_embeddings += 1
+        if self.has_state:
+            num_embeddings += 1
+        if self.has_text:
+            num_embeddings += 1
+        return num_embeddings
 
     def _init_image_layers(self) -> None:
         self.image_keys = [k for k in self.config.input_features if is_image_feature(k)]
@@ -619,6 +662,27 @@ class SACObservationEncoder(nn.Module):
             out += self.config.latent_dim
         self._out_dim = out
 
+    def forward_attention(self, parts: list[Tensor]) -> Tensor:
+        """Apply attention layers to the concatenated input parts.
+        Args:
+            parts (list[Tensor]): List of input tensors to be concatenated and processed.
+            dimensions should be num_embeddings x (batch_size, latent_dim)
+        """
+        x = torch.stack(parts, dim=0).permute(1, 0, 2)  # Shape: (batch_size, num_embeddings, latent_dim)
+        # attention_positional_embeddings shape: (1, num_embeddings, latent_dim)
+        x = x + self.attention_positional_embeddings
+        for i, layer in enumerate(self.attention_layers):
+            output, _ = layer(x, x, x)  # Self-attention
+            output = F.relu(output)
+            x = output + x  # Residual connection
+            x = self.attention_layer_norms[i](x)
+            # Feed-forward network
+            ffn_output = self.ffn_layers[i](x)
+            x = ffn_output + x  # Residual connection
+            x = self.ffn_layer_norms[i](x)
+        x = x.reshape(x.shape[0], -1)  # Shape: (batch_size, num_embeddings * latent_dim)
+        return x
+
     def forward(
         self, obs: dict[str, Tensor], cache: dict[str, Tensor] | None = None, detach: bool = False
     ) -> Tensor:
@@ -627,7 +691,10 @@ class SACObservationEncoder(nn.Module):
         if self.has_images:
             if cache is None and not self.config.use_smolvla:
                 cache = self.get_cached_image_features(obs, normalize=False)
-            parts.append(self._encode_images(cache, detach))
+            if self.config.use_attention_encoder:
+                parts.extend(self._encode_images(cache, detach))
+            else:
+                parts.append(self._encode_images(cache, detach))
         if self.has_env:
             parts.append(self.env_encoder(obs["observation.environment_state"]))
         if self.has_state:
@@ -635,6 +702,8 @@ class SACObservationEncoder(nn.Module):
         if self.has_text:
             parts.append(self._encode_text(obs))
         if parts:
+            if self.config.use_attention_encoder:
+                return self.forward_attention(parts)
             return torch.cat(parts, dim=-1)
 
         raise ValueError(
@@ -707,6 +776,8 @@ class SACObservationEncoder(nn.Module):
             if detach:
                 x = x.detach()
             feats.append(x)
+        if self.config.use_attention_encoder:
+            return feats
         return torch.cat(feats, dim=-1)
 
     def _encode_text(self, obs: dict[str, Tensor]) -> Tensor:

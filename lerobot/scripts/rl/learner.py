@@ -325,6 +325,9 @@ def add_actor_information_and_train(
 
     assert isinstance(policy, nn.Module)
 
+    for name, param in policy.named_parameters():
+        print(f"Policy parameter: {name}, shape: {param.shape}, requires_grad: {param.requires_grad}")
+
     policy._init_temperature()
     policy.train()
 
@@ -370,6 +373,8 @@ def add_actor_information_and_train(
         if shutdown_event is not None and shutdown_event.is_set():
             logging.info("[LEARNER] Shutdown signal received. Exiting...")
             break
+
+        print(f"policy.actor.attention_layers.0.in_proj_weight: {policy.actor.encoder.attention_layers[0].in_proj_weight}")
 
         # Process all available transitions to the replay buffer, send by the actor server
         process_transitions(

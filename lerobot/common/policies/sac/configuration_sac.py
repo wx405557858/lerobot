@@ -194,6 +194,9 @@ class SACConfig(PreTrainedConfig):
     # Gradient clipping norm for the SAC algorithm
     grad_clip_norm: float = 40.0
     use_spatial_encoder: bool = True
+    use_attention_encoder: bool = True
+    num_attention_heads: int = 2
+    num_attention_layers: int = 4
 
     # Network configuration
     # Configuration for the critic network architecture
