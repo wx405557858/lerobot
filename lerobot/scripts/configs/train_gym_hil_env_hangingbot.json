@@ -4,11 +4,11 @@
     "resume": false,
     "seed": 1000,
     "num_workers": 4,
-    "batch_size": 64,
+    "batch_size": 128,
     "steps": 100000,
     "log_freq": 1,
     "save_checkpoint": true,
-    "save_freq": 4000,
+    "save_freq": 2000,
     "pretrained_policy_name_or_path": null,
     "wandb": {
         "enable": true,
@@ -138,6 +138,8 @@
         "use_backup_entropy": true,
         "grad_clip_norm": 10.0,
         "num_discrete_actions": null,
+        "num_attention_layers": 2,
+        "num_attention_heads": 8,
         "critic_network_kwargs": {
             "hidden_dims": [
                 256,

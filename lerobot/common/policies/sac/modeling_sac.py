@@ -536,23 +536,45 @@ class SACObservationEncoder(nn.Module):
                     embed_dim=self.config.latent_dim,
                     num_heads=self.config.num_attention_heads,
                     batch_first=True,
+                    dropout=self.config.attention_dropout,
                 )
             )
             self.attention_layer_norms.append(nn.LayerNorm(self.config.latent_dim))
             self.ffn_layers.append(
                 nn.Sequential(
                     nn.Linear(self.config.latent_dim, 4 * self.config.latent_dim),
-                    nn.ReLU(),
+                    nn.GELU(),
+                    nn.Dropout(self.config.attention_dropout),
                     nn.Linear(4 * self.config.latent_dim, self.config.latent_dim),
-                    nn.ReLU(),
+                    nn.GELU(),
+                    nn.Dropout(self.config.attention_dropout),
                 )
             )
             self.ffn_layer_norms.append(nn.LayerNorm(self.config.latent_dim))
 
         num_embeddings = self.compute_num_embeddings()
         self.attention_positional_embeddings = nn.Parameter(torch.randn(1, num_embeddings, self.config.latent_dim))
-        nn.init.trunc_normal_(self.attention_positional_embeddings, std=0.02)
-    
+        self._init_positional_embeddings()
+        # nn.init.trunc_normal_(self.attention_positional_embeddings, std=0.02)
+
+    def _init_positional_embeddings(self):
+        """Initialize positional embeddings with sinusoidal patterns"""
+        num_embeddings = self.attention_positional_embeddings.shape[1]
+        d_model = self.attention_positional_embeddings.shape[2]
+        
+        position = torch.arange(num_embeddings).unsqueeze(1).float()
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * 
+                            -(math.log(10000.0) / d_model))
+        
+        pe = torch.zeros(num_embeddings, d_model)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        
+        # Mix learned and sinusoidal
+        with torch.no_grad():
+            self.attention_positional_embeddings.data[0] = pe * 0.5 + \
+                torch.randn_like(pe) * 0.1
+        
     def compute_num_embeddings(self) -> int:
         num_embeddings = 0
 
@@ -704,7 +726,7 @@ class SACObservationEncoder(nn.Module):
         x = x + self.attention_positional_embeddings
         for i, layer in enumerate(self.attention_layers):
             output, _ = layer(x, x, x)  # Self-attention
-            output = F.relu(output)
+            # output = F.gelu(output)
             x = output + x  # Residual connection
             x = self.attention_layer_norms[i](x)
             # Feed-forward network
