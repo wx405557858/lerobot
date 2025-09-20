@@ -535,6 +535,7 @@ class SACObservationEncoder(nn.Module):
                 nn.MultiheadAttention(
                     embed_dim=self.config.latent_dim,
                     num_heads=self.config.num_attention_heads,
+                    batch_first=True,
                 )
             )
             self.attention_layer_norms.append(nn.LayerNorm(self.config.latent_dim))
@@ -548,14 +549,26 @@ class SACObservationEncoder(nn.Module):
             )
             self.ffn_layer_norms.append(nn.LayerNorm(self.config.latent_dim))
 
-        num_embeddings = self.compute_num_embedings()
+        num_embeddings = self.compute_num_embeddings()
         self.attention_positional_embeddings = nn.Parameter(torch.randn(1, num_embeddings, self.config.latent_dim))
         nn.init.trunc_normal_(self.attention_positional_embeddings, std=0.02)
     
-    def compute_num_embedings(self) -> int:
+    def compute_num_embeddings(self) -> int:
         num_embeddings = 0
+
+        if self.config.use_image_fusion:
+            return 1  # All embeddings are concatenated into a single sequence
+
         if self.has_images:
-            num_embeddings += len(self.image_keys)
+            if self.config.use_image_fusion:
+                # Each image is represented as a set of patches
+                dummy = torch.zeros(1, *self.config.input_features[self.image_keys[0]].shape)
+                with torch.no_grad():
+                    _, channels, height, width = self.image_encoder(dummy).shape
+                num_patches = height * width
+                num_embeddings += num_patches * len(self.image_keys)
+            else:
+                num_embeddings += len(self.image_keys)
         if self.has_env:
             num_embeddings += 1
         if self.has_state:
@@ -593,6 +606,7 @@ class SACObservationEncoder(nn.Module):
                     width=width,
                     channel=channels,
                     num_features=self.config.image_embedding_pooling_dim,
+                    use_image_fusion=self.config.use_image_fusion,
                 )
                 self.post_encoders[name] = nn.Sequential(
                     nn.Dropout(0.1),
@@ -649,6 +663,7 @@ class SACObservationEncoder(nn.Module):
             nn.LayerNorm(self.config.latent_dim),
             nn.Tanh(),
         )
+        print(f"{self.config.latent_dim=}")
 
     def _compute_output_dim(self) -> None:
         out = 0
@@ -660,6 +675,9 @@ class SACObservationEncoder(nn.Module):
             out += self.config.latent_dim
         if self.has_text:
             out += self.config.latent_dim
+        if self.config.use_image_fusion:
+            num_embeddings = self.compute_num_embeddings()
+            out = num_embeddings * self.config.latent_dim
         self._out_dim = out
 
     def forward_attention(self, parts: list[Tensor]) -> Tensor:
@@ -668,7 +686,20 @@ class SACObservationEncoder(nn.Module):
             parts (list[Tensor]): List of input tensors to be concatenated and processed.
             dimensions should be num_embeddings x (batch_size, latent_dim)
         """
-        x = torch.stack(parts, dim=0).permute(1, 0, 2)  # Shape: (batch_size, num_embeddings, latent_dim)
+        if self.config.use_image_fusion:
+            parts_with_image_patches = []
+            for part in parts:
+                if part.ndim == 4:
+                    # part shape: (batch_size, h, w, dim)
+                    b, h, w, d = part.shape
+                    # Reshape to (h*w, batch_size, dim)
+                    part = part.permute(1, 2, 0, 3).reshape(h * w, b, d)
+                    parts_with_image_patches.append(part)
+                else:
+                    parts_with_image_patches.append(part.reshape(1, part.shape[0], part.shape[1]))
+            x = torch.cat(parts_with_image_patches, dim=0).permute(1, 0, 2)  # Shape: (batch_size, num_embeddings, latent_dim)
+        else:
+            x = torch.stack(parts, dim=0).permute(1, 0, 2)  # Shape: (batch_size, num_embeddings, latent_dim)
         # attention_positional_embeddings shape: (1, num_embeddings, latent_dim)
         x = x + self.attention_positional_embeddings
         for i, layer in enumerate(self.attention_layers):
@@ -680,7 +711,11 @@ class SACObservationEncoder(nn.Module):
             ffn_output = self.ffn_layers[i](x)
             x = ffn_output + x  # Residual connection
             x = self.ffn_layer_norms[i](x)
-        x = x.reshape(x.shape[0], -1)  # Shape: (batch_size, num_embeddings * latent_dim)
+        if self.config.use_image_fusion:
+            # If using image fusion, flatten the spatial dimensions
+            x = x[:, -1]  # Shape: (batch_size, latent_dim)
+        else:
+            x = x.reshape(x.shape[0], -1)  # Shape: (batch_size, num_embeddings * latent_dim)
         return x
 
     def forward(
@@ -765,6 +800,11 @@ class SACObservationEncoder(nn.Module):
         feats = []
         for k, feat in cache.items():
             if not self.config.use_spatial_encoder:
+                if self.config.use_image_fusion:
+                    # feat size: torch.Size([B, 512, 4, 4])
+                    # put last two dimensions to the batch dimension
+                    b, c, h, w = feat.shape
+                    feat = feat.permute(0, 2, 3, 1)
                 x = self.image_projection(feat)
                 if detach:
                     x = x.detach()
@@ -1199,6 +1239,12 @@ class PretrainedImageEncoder(nn.Module):
             self.image_enc_out_shape = self.image_enc_layers.fc.in_features
         else:
             raise ValueError("Unsupported vision encoder architecture, make sure you are using a CNN")
+
+        if self.config.use_image_fusion:
+            # Remove last layer 
+            self.image_enc_layers = nn.Sequential(*list(self.image_enc_layers.children())[:-1])
+            # output shape: torch.Size([1, 512, 4, 4])
+
         return self.image_enc_layers, self.image_enc_out_shape
 
     def forward(self, x):
@@ -1216,7 +1262,7 @@ def orthogonal_init():
 
 
 class SpatialLearnedEmbeddings(nn.Module):
-    def __init__(self, height, width, channel, num_features=8):
+    def __init__(self, height, width, channel, num_features=8, use_image_fusion=False):
         """
         PyTorch implementation of learned spatial embeddings
 
@@ -1231,6 +1277,7 @@ class SpatialLearnedEmbeddings(nn.Module):
         self.width = width
         self.channel = channel
         self.num_features = num_features
+        self.use_image_fusion = use_image_fusion
 
         self.kernel = nn.Parameter(torch.empty(channel, height, width, num_features))
 
@@ -1251,10 +1298,16 @@ class SpatialLearnedEmbeddings(nn.Module):
         kernel_expanded = self.kernel.unsqueeze(0)  # [1, C, H, W, F]
 
         # Element-wise multiplication and spatial reduction
-        output = (features_expanded * kernel_expanded).sum(dim=(2, 3))  # Sum over H,W dimensions
-
-        # Reshape to combine channel and feature dimensions
-        output = output.view(output.size(0), -1)  # [B, C*F]
+        output = (features_expanded * kernel_expanded)
+        if not self.use_image_fusion:
+            output = output.sum(dim=(2, 3))  # Sum over H,W dimensions
+            # Reshape to combine channel and feature dimensions
+            output = output.view(output.size(0), -1)  # [B, C*F]
+        else:
+            # permute to [B, H, W, C, F]
+            output = output.permute(0, 2, 3, 1, 4)
+            # reshape to [B, H, W, C*F]
+            output = output.reshape(output.size(0), self.height, self.width, -1)
 
         return output
 

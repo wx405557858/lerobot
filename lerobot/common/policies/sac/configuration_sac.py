@@ -186,7 +186,7 @@ class SACConfig(PreTrainedConfig):
     # Hidden dimension size for the state encoder
     state_encoder_hidden_dim: int = 256
     # Dimension of the latent space
-    latent_dim: int = 256
+    latent_dim: int = 1024
     # Target entropy for the SAC algorithm
     target_entropy: float | None = None
     # Whether to use backup entropy for the SAC algorithm
@@ -195,8 +195,9 @@ class SACConfig(PreTrainedConfig):
     grad_clip_norm: float = 40.0
     use_spatial_encoder: bool = True
     use_attention_encoder: bool = True
-    num_attention_heads: int = 2
+    num_attention_heads: int = 8
     num_attention_layers: int = 4
+    use_image_fusion: bool = True
 
     # Network configuration
     # Configuration for the critic network architecture
