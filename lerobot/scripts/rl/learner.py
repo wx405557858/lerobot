@@ -374,8 +374,6 @@ def add_actor_information_and_train(
             logging.info("[LEARNER] Shutdown signal received. Exiting...")
             break
 
-        print(f"policy.actor.attention_layers.0.in_proj_weight: {policy.actor.encoder.attention_layers[0].in_proj_weight}")
-
         # Process all available transitions to the replay buffer, send by the actor server
         process_transitions(
             transition_queue=transition_queue,
@@ -575,6 +573,26 @@ def add_actor_information_and_train(
 
                 # Update temperature
                 policy.update_temperature()
+
+        if cfg.policy.use_inverse_dynamics:
+            predicted_action, inverse_dynamics_loss = policy.forward_inverse_dynamics(
+                observations_with_task,
+                actions,
+                next_observations_with_task,
+                observation_features,
+                next_observation_features,
+            )
+            loss_auxiliary = inverse_dynamics_loss
+            optimizers["auxiliary"].zero_grad()
+            loss_auxiliary.backward()
+            auxiliary_grad_norm = torch.nn.utils.clip_grad_norm_(
+                parameters=policy.actor.parameters(), max_norm=clip_grad_norm_value
+            ).item()
+            optimizers["auxiliary"].step()
+
+            # Add auxiliary info to training info
+            training_infos["loss_auxiliary"] = loss_auxiliary.item()
+            training_infos["auxiliary_grad_norm"] = auxiliary_grad_norm
 
         # Push policy to actors if needed
         if time.time() - last_time_policy_pushed > policy_parameters_push_frequency:
@@ -823,6 +841,7 @@ def make_optimizers_and_scheduler(cfg: TrainRLServerPipelineConfig, policy: nn.M
         ],
         lr=cfg.policy.actor_lr,
     )
+    optimizer_auxiliary = torch.optim.Adam(params=policy.actor.parameters(), lr=cfg.policy.actor_lr)
     optimizer_critic = torch.optim.Adam(params=policy.critic_ensemble.parameters(), lr=cfg.policy.critic_lr)
 
     if cfg.policy.num_discrete_actions is not None:
@@ -835,6 +854,7 @@ def make_optimizers_and_scheduler(cfg: TrainRLServerPipelineConfig, policy: nn.M
         "actor": optimizer_actor,
         "critic": optimizer_critic,
         "temperature": optimizer_temperature,
+        "auxiliary": optimizer_auxiliary,
     }
     if cfg.policy.num_discrete_actions is not None:
         optimizers["discrete_critic"] = optimizer_discrete_critic

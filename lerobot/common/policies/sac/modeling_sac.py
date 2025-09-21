@@ -527,7 +527,7 @@ class SACPolicy(
     
     def _init_inverse_dynamics_model(self):
         """Initialize the inverse dynamics model."""
-        input_dim = self.encoder_actor.output_dim * 2  # Concatenate current and next embeddings
+        input_dim = self.actor.out_features * 2  # Concatenate current and next embeddings
         output_dim = self.config.output_features["action"].shape[0]
         self.inverse_dynamics_model = MLP(
             input_dim=input_dim,
@@ -1151,11 +1151,13 @@ class Policy(nn.Module):
         self.use_tanh_squash = use_tanh_squash
         self.encoder_is_shared = encoder_is_shared
 
+
         # Find the last Linear layer's output dimension
         for layer in reversed(network.net):
             if isinstance(layer, nn.Linear):
                 out_features = layer.out_features
                 break
+        self.out_features = out_features
         # Mean layer
         self.mean_layer = nn.Linear(out_features, action_dim)
         if init_final is not None:
@@ -1185,7 +1187,8 @@ class Policy(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # We detach the encoder if it is shared to avoid backprop through it
         # This is important to avoid the encoder to be updated through the policy
-        obs_enc = self.encoder(observations, cache=observation_features, detach=self.encoder_is_shared)
+        # obs_enc = self.encoder(observations, cache=observation_features, detach=self.encoder_is_shared)
+        obs_enc = self.encoder(observations, cache=observation_features, detach=False)
 
         # Get network outputs
         outputs = self.network(obs_enc)

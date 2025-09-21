@@ -125,12 +125,12 @@ def train(config: PretrainingConfig, dataset: LeRobotDataset, policy: SACPolicy)
 
             actions = batch["action"][:, 0]
             rewards = batch["next.reward"]
-            observations = {"observation.state": batch["observation.state"][:, 0]}
+            observations = {"observation.state": batch["observation.state"][:, 0] * 0.0}
             for key in camera_keys:
                 observations[key] = batch[key][:, 0]
             observations_with_task = observations.copy()
             observations_with_task["task"] = batch["task"]
-            next_observations = {"observation.state": batch["observation.state"][:, 1]}
+            next_observations = {"observation.state": batch["observation.state"][:, 1]  * 0.0}
             for key in camera_keys:
                 next_observations[key] = batch[key][:, 1]
             next_observations_with_task = next_observations.copy()
@@ -167,7 +167,7 @@ def train(config: PretrainingConfig, dataset: LeRobotDataset, policy: SACPolicy)
 @draccus.wrap()
 def main(config: PretrainingConfig):
     dataset, policy = load_dataset(config)
-    train(config, dataset, policy)
+    # train(config, dataset, policy)
 
 if __name__ == "__main__":
     main()
