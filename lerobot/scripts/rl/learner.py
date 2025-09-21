@@ -438,8 +438,8 @@ def add_actor_information_and_train(
             forward_batch = {
                 "action": actions,
                 "reward": rewards,
-                "state": observations,
-                "next_state": next_observations,
+                "state": observations_with_task,
+                "next_state": next_observations_with_task,
                 "done": done,
                 "observation_feature": observation_features,
                 "next_observation_feature": next_observation_features,
@@ -502,8 +502,8 @@ def add_actor_information_and_train(
         forward_batch = {
             "action": actions,
             "reward": rewards,
-            "state": observations,
-            "next_state": next_observations,
+            "state": observations_with_task,
+            "next_state": next_observations_with_task,
             "done": done,
             "observation_feature": observation_features,
             "next_observation_feature": next_observation_features,

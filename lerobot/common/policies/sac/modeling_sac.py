@@ -60,6 +60,7 @@ class SACPolicy(
         self._init_encoders()
         self._init_critics(continuous_action_dim)
         self._init_actor(continuous_action_dim)
+        self._init_inverse_dynamics_model()
         self._init_temperature()
         self.epsilon_greedy = config.epsilon_greedy
 
@@ -404,6 +405,22 @@ class SACPolicy(
         actor_loss = ((self.temperature * log_probs) - min_q_preds).mean()
         return actor_loss
 
+    def forward_inverse_dynamics(
+        self,
+        observations,
+        actions,
+        next_observations,
+        observation_features: Tensor | None = None,
+        next_observation_features: Tensor | None = None,
+    ) -> Tensor:
+        actor_embeddings = self.actor.get_actor_embeddings(observations, observation_features, detach=False)
+        next_actor_embeddings = self.actor.get_actor_embeddings(next_observations, next_observation_features, detach=False)
+        
+        actor_embeddings_concat = torch.cat([actor_embeddings, next_actor_embeddings], dim=-1)
+        predicted_actions = self.inverse_dynamics_model(actor_embeddings_concat)
+        inverse_dynamics_loss = F.mse_loss(predicted_actions, actions)
+        return predicted_actions, inverse_dynamics_loss
+
     def _init_normalization(self, dataset_stats):
         """Initialize input/output normalization modules."""
         self.normalize_inputs = nn.Identity()
@@ -507,6 +524,16 @@ class SACPolicy(
         temp_init = self.config.temperature_init
         self.log_alpha = nn.Parameter(torch.tensor([math.log(temp_init)]).to(self.config.device))
         self.temperature = self.log_alpha.exp().item()
+    
+    def _init_inverse_dynamics_model(self):
+        """Initialize the inverse dynamics model."""
+        input_dim = self.encoder_actor.output_dim * 2  # Concatenate current and next embeddings
+        output_dim = self.config.output_features["action"].shape[0]
+        self.inverse_dynamics_model = MLP(
+            input_dim=input_dim,
+            hidden_dims=[output_dim],
+            dropout_rate=0.1,
+        )
 
 
 class SACObservationEncoder(nn.Module):
@@ -1146,6 +1173,11 @@ class Policy(nn.Module):
             else:
                 orthogonal_init()(self.std_layer.weight)
 
+    def get_actor_embeddings(self, observations: torch.Tensor, observation_features: torch.Tensor | None = None, detach: bool = False) -> torch.Tensor:
+        obs_enc = self.encoder(observations, cache=observation_features, detach=detach)
+        outputs = self.network(obs_enc)
+        return outputs
+    
     def forward(
         self,
         observations: torch.Tensor,

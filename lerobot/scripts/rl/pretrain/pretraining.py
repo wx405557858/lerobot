@@ -27,7 +27,9 @@ from lerobot.scripts.rl.learner import check_nan_in_transition, get_observation_
 class PretrainingConfig:
     repo_id: str = "wx405557858/pick_ring_env_36"
     device: str = "cuda"
-    num_training_steps: int = 100
+    num_training_steps: int = 10000
+    log_interval: int = 10
+    batch_size: int = 128
 
 def load_dataset(config: PretrainingConfig):
     # Dataset to load
@@ -107,47 +109,60 @@ def load_dataset(config: PretrainingConfig):
     return dataset, policy
 
 def train(config: PretrainingConfig, dataset: LeRobotDataset, policy: SACPolicy):
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
+
+    optimizer = torch.optim.Adam(policy.parameters(), lr=3e-4)
+    policy.train()
 
     camera_keys = dataset.meta.camera_keys
-    for batch in dataloader:
-        for key, value in batch.items():
-            if isinstance(value, torch.Tensor):
-                batch[key] = value.to(config.device)
+    iter_step = 0
+    mean_loss = 0.0
+    while True:
+        for batch in dataloader:
+            for key, value in batch.items():
+                if isinstance(value, torch.Tensor):
+                    batch[key] = value.to(config.device)
 
-        actions = batch["action"][:, 0]
-        rewards = batch["next.reward"]
-        observations = {"observation.state": batch["observation.state"][:, 0]}
-        for key in camera_keys:
-            observations[key] = batch[key][:, 0]
-        observations_with_task = observations.copy()
-        observations_with_task["task"] = batch["task"]
-        next_observations = {"observation.state": batch["observation.state"][:, 1]}
-        for key in camera_keys:
-            next_observations[key] = batch[key][:, 1]
-        next_observations_with_task = next_observations.copy()
-        next_observations_with_task["task"] = batch["task"]
-        done = batch["next.done"]
-        check_nan_in_transition(observations=observations, actions=actions, next_state=next_observations)
+            actions = batch["action"][:, 0]
+            rewards = batch["next.reward"]
+            observations = {"observation.state": batch["observation.state"][:, 0]}
+            for key in camera_keys:
+                observations[key] = batch[key][:, 0]
+            observations_with_task = observations.copy()
+            observations_with_task["task"] = batch["task"]
+            next_observations = {"observation.state": batch["observation.state"][:, 1]}
+            for key in camera_keys:
+                next_observations[key] = batch[key][:, 1]
+            next_observations_with_task = next_observations.copy()
+            next_observations_with_task["task"] = batch["task"]
+            done = batch["next.done"]
+            check_nan_in_transition(observations=observations, actions=actions, next_state=next_observations)
 
-        observation_features, next_observation_features = get_observation_features(
-            policy=policy, observations=observations_with_task, next_observations=next_observations_with_task
-        )
+            observation_features, next_observation_features = get_observation_features(
+                policy=policy, observations=observations_with_task, next_observations=next_observations_with_task
+            )
 
-        # Create a batch dictionary with all required elements for the forward method
-        forward_batch = {
-            "action": actions,
-            "reward": rewards,
-            "state": observations,
-            "next_state": next_observations,
-            "done": done,
-            "observation_feature": observation_features,
-            "next_observation_feature": next_observation_features,
-            "complementary_info": {},
-            "task": batch["task"],
-        }
-        action = policy(forward_batch, "actor")
-        print(f"Selected action: {action}")
+            predicted_action, inverse_dynamics_loss = policy.forward_inverse_dynamics(
+                observations_with_task,
+                actions,
+                next_observations_with_task,
+                observation_features,
+                next_observation_features,
+            )
+
+            optimizer.zero_grad()
+            inverse_dynamics_loss.backward()
+            optimizer.step()
+
+            mean_loss = 0.9 * mean_loss + 0.1 * inverse_dynamics_loss.detach().cpu().item()
+
+            iter_step += 1
+            if iter_step >= config.num_training_steps:
+                break
+            if iter_step % config.log_interval == 0:
+                print(f"Step {iter_step}: mean inverse dynamics loss = {mean_loss:.6f}")
+
+
 
 @draccus.wrap()
 def main(config: PretrainingConfig):
