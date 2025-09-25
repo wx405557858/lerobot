@@ -37,8 +37,9 @@
         "control_mode": "gamepad"
     },
     "name": "franka_sim",
-    "mode": "record",
+    "mode": null,
     "repo_id": "wx405557858/pick_ring_env_18",
+    "base_policy_pretrained_path": "/home/shaoxiong/Code/lerobot-smolvla/outputs/train/2025-09-22/00-05-37_smolvla/checkpoints/100000/pretrained_model",
     "dataset_root": null,
     "task": "InterbotixPickEnv-v0",
     "num_episodes": 30,

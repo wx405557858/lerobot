@@ -254,6 +254,11 @@ def start_learner_threads(
 # Core algorithm functions #
 #################################################
 
+def add_wrist_mask(observations, cfg):
+    mask_wrist_rate = cfg.policy.mask_rate
+    mask_wrist = torch.rand(observations["observation.images.wrist"].shape[0]) <= mask_wrist_rate
+    observations["observation.images.wrist"][mask_wrist] = observations["observation.images.wrist"][mask_wrist] * 0.0
+    return observations
 
 def add_actor_information_and_train(
     cfg: TrainRLServerPipelineConfig,
@@ -420,9 +425,11 @@ def add_actor_information_and_train(
             actions = batch["action"]
             rewards = batch["reward"]
             observations = batch["state"]
+            observations = add_wrist_mask(observations, cfg)
             observations_with_task = observations.copy()
             observations_with_task["task"] = batch["task"]
             next_observations = batch["next_state"]
+            next_observations = add_wrist_mask(next_observations, cfg)
             next_observations_with_task = next_observations.copy()
             next_observations_with_task["task"] = batch["task"]
             done = batch["done"]
@@ -483,9 +490,11 @@ def add_actor_information_and_train(
         actions = batch["action"]
         rewards = batch["reward"]
         observations = batch["state"]
+        observations = add_wrist_mask(observations, cfg)
         observations_with_task = observations.copy()
         observations_with_task["task"] = batch["task"]
         next_observations = batch["next_state"]
+        next_observations = add_wrist_mask(next_observations, cfg)
         next_observations_with_task = next_observations.copy()
         next_observations_with_task["task"] = batch["task"]
         done = batch["done"]

@@ -573,7 +573,6 @@ class SACObservationEncoder(nn.Module):
                     nn.GELU(),
                     nn.Dropout(self.config.attention_dropout),
                     nn.Linear(4 * self.config.latent_dim, self.config.latent_dim),
-                    nn.GELU(),
                     nn.Dropout(self.config.attention_dropout),
                 )
             )

@@ -27,7 +27,7 @@ from lerobot.scripts.rl.learner import check_nan_in_transition, get_observation_
 
 @dataclasses.dataclass
 class ProcessDatasetConfig:
-    repo_id: str = "wx405557858/pick_ring_env_37"
+    repo_id: str = "wx405557858/pick_ring_env_38_tmp"
     device: str = "cuda"
     num_training_steps: int = 10000
     log_interval: int = 10
@@ -65,9 +65,14 @@ def trim_dataset(config: ProcessDatasetConfig):
     print(f"  episode_index: {sample['episode_index']}")
     
     # Show available observation keys
-    for key, value in sample.items():
-        if key.startswith('observation') and isinstance(value, torch.Tensor):
-            print(f"  {key}: {value.shape}")
+    for sample in dataset:
+        for key, value in sample.items():
+            if key.startswith('observation') and isinstance(value, torch.Tensor):
+                print(f"  {key}: {value.shape}")
+                if key.startswith('observation.images'):
+                    import cv2
+                    cv2.imshow(key, value.permute(1, 2, 0).numpy()[:, :, ::-1])  # Show BGR channels
+                    cv2.waitKey(0)
     
     print(f"\nStarting to create trimmed dataset...")
     
@@ -79,76 +84,76 @@ def trim_dataset(config: ProcessDatasetConfig):
     from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
     dataset_path = Path(HF_LEROBOT_HOME) / new_repo_id
 
-    # Create a new (empty) LeRobotDataset for writing
-    new_dataset = LeRobotDataset.create(
-        repo_id=new_repo_id,
-        fps=dataset.fps,
-        root=None,  # Will use default cache directory
-        robot_type=dataset.meta.robot_type,
-        features=dataset.meta.info["features"],
-        use_videos=len(dataset.meta.video_keys) > 0,
-    )
+    # # Create a new (empty) LeRobotDataset for writing
+    # new_dataset = LeRobotDataset.create(
+    #     repo_id=new_repo_id,
+    #     fps=dataset.fps,
+    #     root=None,  # Will use default cache directory
+    #     robot_type=dataset.meta.robot_type,
+    #     features=dataset.meta.info["features"],
+    #     use_videos=len(dataset.meta.video_keys) > 0,
+    # )
     
-    print(f"Created new dataset with {new_dataset.meta.robot_type} robot type")
-    print(f"Dataset features: {list(new_dataset.features.keys())}")
+    # print(f"Created new dataset with {new_dataset.meta.robot_type} robot type")
+    # print(f"Dataset features: {list(new_dataset.features.keys())}")
     
-    # Iterate through the trimmed dataset and copy frames to new dataset
-    prev_episode_index = -1
-    task_name = "Pick ring environment task"  # Default task name
+    # # Iterate through the trimmed dataset and copy frames to new dataset
+    # prev_episode_index = -1
+    # task_name = "Pick ring environment task"  # Default task name
     
-    for frame_idx in range(len(dataset)):
-        frame = dataset[frame_idx]
+    # for frame_idx in range(len(dataset)):
+    #     frame = dataset[frame_idx]
         
-        # Create a copy of the frame to add to the new dataset
-        new_frame = {}
-        for key, value in frame.items():
-            # Skip metadata fields that will be automatically handled
-            if key in ("task_index", "timestamp", "episode_index", "frame_index", "index", "task"):
-                continue
+    #     # Create a copy of the frame to add to the new dataset
+    #     new_frame = {}
+    #     for key, value in frame.items():
+    #         # Skip metadata fields that will be automatically handled
+    #         if key in ("task_index", "timestamp", "episode_index", "frame_index", "index", "task"):
+    #             continue
             
-            # Handle reward and done signals - ensure they have proper shape
-            if key in ("next.done", "next.reward"):
-                if hasattr(value, 'shape') and len(value.shape) == 0:
-                    value = value.unsqueeze(0)
+    #         # Handle reward and done signals - ensure they have proper shape
+    #         if key in ("next.done", "next.reward"):
+    #             if hasattr(value, 'shape') and len(value.shape) == 0:
+    #                 value = value.unsqueeze(0)
             
-            # Handle complementary info fields that might be scalars
-            if key.startswith("complementary_info.") and hasattr(value, 'shape') and len(value.shape) == 0:
-                value = value.unsqueeze(0)
+    #         # Handle complementary info fields that might be scalars
+    #         if key.startswith("complementary_info.") and hasattr(value, 'shape') and len(value.shape) == 0:
+    #             value = value.unsqueeze(0)
             
-            new_frame[key] = value
+    #         new_frame[key] = value
         
-        # Get task from original frame if available
-        if "task" in frame:
-            current_task = frame["task"]
-        else:
-            current_task = task_name
+    #     # Get task from original frame if available
+    #     if "task" in frame:
+    #         current_task = frame["task"]
+    #     else:
+    #         current_task = task_name
             
-        # Add frame to new dataset
-        new_dataset.add_frame(new_frame, task=current_task)
+    #     # Add frame to new dataset
+    #     new_dataset.add_frame(new_frame, task=current_task)
         
-        # Check if we've moved to a new episode
-        current_episode_index = frame["episode_index"].item()
-        if current_episode_index != prev_episode_index and prev_episode_index != -1:
-            # Save the previous episode
-            new_dataset.save_episode()
-            print(f"Saved episode {prev_episode_index}")
+    #     # Check if we've moved to a new episode
+    #     current_episode_index = frame["episode_index"].item()
+    #     if current_episode_index != prev_episode_index and prev_episode_index != -1:
+    #         # Save the previous episode
+    #         new_dataset.save_episode()
+    #         print(f"Saved episode {prev_episode_index}")
         
-        prev_episode_index = current_episode_index
+    #     prev_episode_index = current_episode_index
     
-    # Save the last episode
-    new_dataset.save_episode()
-    print(f"Saved final episode {prev_episode_index}")
+    # # Save the last episode
+    # new_dataset.save_episode()
+    # print(f"Saved final episode {prev_episode_index}")
     
-    print(f"New dataset created with {new_dataset.num_episodes} episodes and {new_dataset.num_frames} frames")
+    # print(f"New dataset created with {new_dataset.num_episodes} episodes and {new_dataset.num_frames} frames")
     
-    # Optionally push to hub (set to False by default for safety)
-    push_to_hub = False
-    if push_to_hub:
-        print("Pushing trimmed dataset to Hugging Face Hub...")
-        new_dataset.push_to_hub()
-        print(f"Dataset uploaded to: https://huggingface.co/datasets/{new_repo_id}")
-    else:
-        print(f"Dataset saved locally. To upload to hub, set push_to_hub=True")
+    # # Optionally push to hub (set to False by default for safety)
+    # push_to_hub = False
+    # if push_to_hub:
+    #     print("Pushing trimmed dataset to Hugging Face Hub...")
+    #     new_dataset.push_to_hub()
+    #     print(f"Dataset uploaded to: https://huggingface.co/datasets/{new_repo_id}")
+    # else:
+    #     print(f"Dataset saved locally. To upload to hub, set push_to_hub=True")
 
 @draccus.wrap()
 def main(config: ProcessDatasetConfig):

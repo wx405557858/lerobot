@@ -1772,9 +1772,14 @@ def make_robot_env(cfg: EnvConfig) -> gym.Env:
 
         if cfg.task == "InterbotixPickEnv-v0":
             import hangingbot.gym.interbotix_pick_env
+            from hangingbot.gym.interbotix_pick_env import InterbotixPickEnvConfig
             from hangingbot.gym.wrappers.hil_wrappers import InputsControlWrapper, EEActionWrapper
             env = gym.make(
                 f"{cfg.task}",
+                InterbotixPickEnvConfig(
+                    fps=cfg.fps,
+                    max_episode_length=15 * cfg.fps, # 15 seconds
+                )
             )
             # env = EEActionWrapper(env, use_gripper=cfg.wrapper.use_gripper)
             env = InputsControlWrapper(
@@ -2171,31 +2176,35 @@ def main(cfg: EnvConfig):
 
     # Smoothing coefficient (alpha) defines how much of the new random sample to mix in.
     # A value close to 0 makes the trajectory very smooth (slow to change), while a value close to 1 is less smooth.
-    alpha = 1.0
+    alpha = 0.99
 
     num_episode = 0
     successes = []
-    obs, _ = env.reset()
+    obs, info = env.reset()
     duration_list = []
     while num_episode < 1000:
         start_loop_s = time.perf_counter()
-        if policy is not None:
-            if smolvla_policy is not None:
-                # use smolvla as base policy
-                obs["task"] = cfg.task
-                start_time = time.perf_counter()
-                smoothed_action = smolvla_policy.select_action(obs)
-                print("smolvla inference time:", time.perf_counter() - start_time)
-                for k in range(smolvla_policy.config.n_action_steps - 1):
-                    _ = smolvla_policy.select_action(obs)
-                print("smolvla action:", smoothed_action, "queue size", smolvla_policy._queues["action"])
-            else:
-                # Use the policy to select the next action based on the current observation.
-                start_time = time.perf_counter()
-                smoothed_action = policy.select_action(obs)
-                duration_list = duration_list[-100:]  # keep last 100
-                duration_list.append(time.perf_counter() - start_time)
-                print("sac inference time:", np.mean(duration_list), "std:", np.std(duration_list))
+        if smolvla_policy is not None:
+            # use smolvla as base policy
+            # obs["task"] = cfg.task
+            obs["task"] = info["text_prompt"]
+            print("task:", obs["task"])
+            start_time = time.perf_counter()
+            new_action = smolvla_policy.select_action(obs)
+            new_action[0, :3] = new_action[0, :3] / cfg.fps * 2.0
+
+            smoothed_action = alpha * new_action.cpu().detach() + (1 - alpha) * smoothed_action
+            print("smolvla inference time:", time.perf_counter() - start_time)
+            for k in range(smolvla_policy.config.n_action_steps - 1):
+                _ = smolvla_policy.select_action(obs)
+            print("smolvla action:", smoothed_action, "queue size", smolvla_policy._queues["action"])
+        elif policy is not None:
+            # Use the policy to select the next action based on the current observation.
+            start_time = time.perf_counter()
+            smoothed_action = policy.select_action(obs)
+            duration_list = duration_list[-100:]  # keep last 100
+            duration_list.append(time.perf_counter() - start_time)
+            print("sac inference time:", np.mean(duration_list), "std:", np.std(duration_list))
         else:
             # Sample a new random action from the robot's action space.
             new_random_action = env.action_space.sample()
@@ -2207,7 +2216,7 @@ def main(cfg: EnvConfig):
         obs, reward, terminated, truncated, info = env.step(smoothed_action)
         if terminated or truncated:
             successes.append(reward)
-            obs, _ = env.reset()
+            obs, info = env.reset()
             num_episode += 1
 
         dt_s = time.perf_counter() - start_loop_s

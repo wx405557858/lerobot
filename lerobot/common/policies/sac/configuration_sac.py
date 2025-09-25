@@ -200,6 +200,7 @@ class SACConfig(PreTrainedConfig):
     use_image_fusion: bool = True
     attention_dropout: float = 0.1
     use_inverse_dynamics: bool = True
+    mask_rate: float = 0.3
 
     # Network configuration
     # Configuration for the critic network architecture

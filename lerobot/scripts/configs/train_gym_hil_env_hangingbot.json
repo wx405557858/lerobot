@@ -8,7 +8,7 @@
     "steps": 100000,
     "log_freq": 1,
     "save_checkpoint": true,
-    "save_freq": 3000,
+    "save_freq": 2000,
     "pretrained_policy_name_or_path": null,
     "wandb": {
         "enable": true,
@@ -16,7 +16,7 @@
         "disable_artifact": true
     },
     "dataset": {
-        "repo_id": "wx405557858/pick_ring_env_36",
+        "repo_id": "wx405557858/pick_ring_env_39",
         "use_imagenet_stats": false
     },
     "policy": {
@@ -129,16 +129,16 @@
         "num_subsample_critics": null,
         "critic_lr": 0.0003,
         "actor_lr": 0.0003,
-        "temperature_lr": 0.0003,
+        "temperature_lr": 0.00003,
         "critic_target_update_weight": 0.005,
-        "utd_ratio": 2,
+        "utd_ratio": 5,
         "state_encoder_hidden_dim": 256,
         "latent_dim": 64,
         "target_entropy": null,
         "use_backup_entropy": true,
         "grad_clip_norm": 10.0,
         "num_discrete_actions": null,
-        "num_attention_layers": 2,
+        "num_attention_layers": 1,
         "num_attention_heads": 8,
         "critic_network_kwargs": {
             "hidden_dims": [
@@ -211,7 +211,7 @@
     },
     "name": "franka_sim",
     "mode": null,
-    "repo_id": "wx405557858/pick_ring_env_36",
+    "repo_id": "wx405557858/pick_ring_env_39",
     "dataset_root": null,
     "task": "InterbotixPickEnv-v0",
     "num_episodes": 30,
