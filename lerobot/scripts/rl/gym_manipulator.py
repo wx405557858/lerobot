@@ -1776,7 +1776,8 @@ def make_robot_env(cfg: EnvConfig) -> gym.Env:
             from hangingbot.gym.wrappers.hil_wrappers import InputsControlWrapper, EEActionWrapper
             env = gym.make(
                 f"{cfg.task}",
-                InterbotixPickEnvConfig(
+                max_episode_steps=15 * cfg.fps, # 15 seconds
+                env_config=InterbotixPickEnvConfig(
                     fps=cfg.fps,
                     max_episode_length=15 * cfg.fps, # 15 seconds
                 )
