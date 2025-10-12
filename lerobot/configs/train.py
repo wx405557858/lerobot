@@ -64,6 +64,7 @@ class TrainPipelineConfig(HubMixin):
     eval: EvalConfig = field(default_factory=EvalConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
     pretrained_policy_name_or_path: str | None = None
+    offline_train: bool = False
 
     def __post_init__(self):
         self.checkpoint_path = None

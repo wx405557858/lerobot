@@ -398,7 +398,7 @@ def add_actor_information_and_train(
         )
 
         # Wait until the replay buffer has enough samples to start training
-        if len(replay_buffer) < online_step_before_learning:
+        if len(replay_buffer) < online_step_before_learning and not cfg.offline_train:
             continue
 
         if online_iterator is None:
@@ -414,7 +414,10 @@ def add_actor_information_and_train(
         time_for_one_optimization_step = time.time()
         for _ in range(utd_ratio - 1):
             # Sample from the iterators
-            batch = next(online_iterator)
+            if cfg.offline_train:
+                batch = next(offline_iterator)
+            else:
+                batch = next(online_iterator)
 
             if dataset_repo_id is not None:
                 batch_offline = next(offline_iterator)
@@ -479,7 +482,10 @@ def add_actor_information_and_train(
             policy.update_target_networks()
 
         # Sample for the last update in the UTD ratio
-        batch = next(online_iterator)
+        if cfg.offline_train:
+            batch = next(offline_iterator)
+        else:
+            batch = next(online_iterator)
 
         if dataset_repo_id is not None:
             batch_offline = next(offline_iterator)

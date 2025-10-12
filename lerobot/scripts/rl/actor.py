@@ -277,6 +277,11 @@ def act_with_policy(
         if shutdown_event.is_set():
             logging.info("[ACTOR] Shutting down act_with_policy")
             return
+
+        if cfg.offline_train:
+            print("Offline training mode, skipping environment interaction")
+            time.sleep(1)
+            continue
         
         obs_with_task = obs.copy()
         obs_with_task["task"] = [info["text_prompt"]]

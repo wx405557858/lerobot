@@ -10,6 +10,7 @@
     "save_checkpoint": true,
     "save_freq": 2000,
     "pretrained_policy_name_or_path": null,
+    "offline_train": true,
     "wandb": {
         "enable": true,
         "project": "test_franka_sim",
