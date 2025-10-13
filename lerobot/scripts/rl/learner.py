@@ -608,9 +608,27 @@ def add_actor_information_and_train(
             # Add auxiliary info to training info
             training_infos["loss_auxiliary"] = loss_auxiliary.item()
             training_infos["auxiliary_grad_norm"] = auxiliary_grad_norm
+        
+        if cfg.policy.use_imitation_learning:
+            predicted_action, imitation_learning_loss = policy.forward_imitation_learning(
+                observations_with_task,
+                actions,
+                observation_features,
+            )
+            loss_imitation = imitation_learning_loss * cfg.policy.imitation_learning_weight
+            optimizers["actor"].zero_grad()
+            loss_imitation.backward()
+            imitation_grad_norm = torch.nn.utils.clip_grad_norm_(
+                parameters=policy.actor.parameters(), max_norm=clip_grad_norm_value
+            ).item()
+            optimizers["actor"].step()
+
+            # Add imitation info to training info
+            training_infos["loss_imitation"] = loss_imitation.item()
+            training_infos["imitation_grad_norm"] = imitation_grad_norm
 
         # Push policy to actors if needed
-        if time.time() - last_time_policy_pushed > policy_parameters_push_frequency:
+        if time.time() - last_time_policy_pushed > policy_parameters_push_frequency and not cfg.offline_train:
             push_actor_policy_to_queue(parameters_queue=parameters_queue, policy=policy)
             last_time_policy_pushed = time.time()
 
@@ -806,9 +824,10 @@ def save_training_checkpoint(
     # NOTE: Handle the case where the dataset repo id is not specified in the config
     # eg. RL training without demonstrations data
     repo_id_buffer_save = cfg.env.task if dataset_repo_id is None else dataset_repo_id
-    replay_buffer.to_lerobot_dataset(repo_id=repo_id_buffer_save, fps=fps, root=dataset_dir)
+    if not cfg.offline_train:
+        replay_buffer.to_lerobot_dataset(repo_id=repo_id_buffer_save, fps=fps, root=dataset_dir)
 
-    if offline_replay_buffer is not None:
+    if offline_replay_buffer is not None and not cfg.offline_train:
         dataset_offline_dir = os.path.join(cfg.output_dir, "dataset_offline")
         if os.path.exists(dataset_offline_dir) and os.path.isdir(dataset_offline_dir):
             shutil.rmtree(dataset_offline_dir)

@@ -421,6 +421,12 @@ class SACPolicy(
         inverse_dynamics_loss = F.mse_loss(predicted_actions, actions)
         return predicted_actions, inverse_dynamics_loss
 
+    def forward_imitation_learning(self, observations, actions, observation_features=None):
+        """Compute the imitation learning loss"""
+        predicted_actions, _, _ = self.actor(observations, observation_features)
+        imitation_loss = F.mse_loss(predicted_actions, actions)
+        return predicted_actions, imitation_loss
+
     def _init_normalization(self, dataset_stats):
         """Initialize input/output normalization modules."""
         self.normalize_inputs = nn.Identity()
@@ -932,9 +938,11 @@ class SACObservationEncoder(nn.Module):
         with torch.no_grad() if self.config.freeze_text_encoder else torch.enable_grad():
             text_features = self.text_encoder(**inputs).pooler_output
         
+        print(f"text_features before projection: {text_features}")
         # Project to latent dimension
         text_features = self.text_projection(text_features)
-        
+
+        print(f"text_features after projection: {text_features}")
         return text_features
 
     @property

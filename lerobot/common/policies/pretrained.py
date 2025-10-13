@@ -161,7 +161,6 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
                     logging.warning(
                         "Safetensors failed due to shared tensors. Loading state dict and manually handling shared parameters."
                     )
-                    import torch
                     from safetensors import safe_open
                     
                     # Load the safetensors file manually
@@ -169,31 +168,7 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
                     with safe_open(model_file, framework="pt", device=map_location) as f:
                         for key in f.keys():
                             state_dict[key] = f.get_tensor(key)
-                    
-                    # Create a mapping to resolve shared tensor conflicts
-                    # For text encoder weights, prefer the base encoder names over component-specific ones
-                    resolved_state_dict = {}
-                    shared_tensors = {}
-                    
-                    for key, tensor in state_dict.items():
-                        # Check if this tensor is already seen (shared)
-                        tensor_id = id(tensor.storage())
-                        if tensor_id in shared_tensors:
-                            # This is a shared tensor, decide which key to keep
-                            existing_key = shared_tensors[tensor_id]
-                            # Prefer shorter, more generic names (e.g., encoder_actor over critic_target._orig_mod)
-                            if len(key) < len(existing_key) or "encoder_" in key:
-                                # Replace with the new key
-                                del resolved_state_dict[existing_key]
-                                resolved_state_dict[key] = tensor
-                                shared_tensors[tensor_id] = key
-                            # else keep the existing key
-                        else:
-                            resolved_state_dict[key] = tensor
-                            shared_tensors[tensor_id] = key
-                    
-                    # Load the resolved state dict
-                    model.load_state_dict(resolved_state_dict, strict=strict)
+                    model.load_state_dict(state_dict, strict=strict)
             else:
                 raise e
         return model

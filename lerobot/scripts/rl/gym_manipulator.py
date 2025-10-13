@@ -2202,6 +2202,8 @@ def main(cfg: EnvConfig):
         elif policy is not None:
             # Use the policy to select the next action based on the current observation.
             start_time = time.perf_counter()
+            obs["task"] = info["text_prompt"]
+            print("task:", obs["task"])
             smoothed_action = policy.select_action(obs)
             duration_list = duration_list[-100:]  # keep last 100
             duration_list.append(time.perf_counter() - start_time)
