@@ -2192,7 +2192,7 @@ def main(cfg: EnvConfig):
             print("task:", obs["task"])
             start_time = time.perf_counter()
             new_action = smolvla_policy.select_action(obs)
-            new_action[0, :3] = new_action[0, :3] / cfg.fps * 2.0
+            # new_action[0, :3] = new_action[0, :3] / cfg.fps * 2.0
 
             smoothed_action = alpha * new_action.cpu().detach() + (1 - alpha) * smoothed_action
             print("smolvla inference time:", time.perf_counter() - start_time)
