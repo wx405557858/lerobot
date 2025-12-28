@@ -148,6 +148,12 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
         revision: str | None = None,
         **policy_kwargs,
     ) -> T:
+        cli_overrides = policy_kwargs.pop("cli_overrides", [])
+        # revision = "3326b100334ffc0a0bd1ec27e3afb1cfa2a6000c"
+        # get revision from cli_overrides if exists
+        for i in range(len(cli_overrides)):
+            if cli_overrides[i].startswith("--revision"):
+                revision = cli_overrides[i].split("=")[1]
         model_id = str(pretrained_name_or_path)
         config_file: str | None = None
         if Path(model_id).is_dir():
