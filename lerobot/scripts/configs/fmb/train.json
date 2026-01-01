@@ -5,19 +5,19 @@
     "seed": 1000,
     "num_workers": 4,
     "batch_size": 128,
-    "steps": 40000,
+    "steps": 10000,
     "log_freq": 1,
     "save_checkpoint": true,
     "save_freq": 4000,
     "pretrained_policy_name_or_path": null,
-    "offline_train": true,
+    "offline_train": false,
     "wandb": {
         "enable": true,
         "project": "test_franka_sim",
         "disable_artifact": true
     },
     "dataset": {
-        "repo_id": "wx405557858/fmb_0",
+        "repo_id": "wx405557858/fmb_3",
         "use_imagenet_stats": false
     },
     "policy": {
@@ -212,7 +212,7 @@
     },
     "name": "franka_sim",
     "mode": null,
-    "repo_id": "wx405557858/fmb_0",
+    "repo_id": "wx405557858/fmb_3",
     "dataset_root": null,
     "task": "InterbotixPickEnv-v0",
     "num_episodes": 30,

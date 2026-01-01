@@ -144,6 +144,8 @@ class SACConfig(PreTrainedConfig):
     num_discrete_actions: int | None = None
     # Dimension of the image embedding pooling
     image_embedding_pooling_dim: int = 8
+    # action mapping
+    action_gamma: float = 1.5
 
     # Training parameter
     # Number of steps for online training
@@ -203,6 +205,7 @@ class SACConfig(PreTrainedConfig):
     mask_rate: float = 0.3
     use_imitation_learning: bool = True
     imitation_learning_weight: float = 0.5
+    use_text_id: bool = True
 
     # Network configuration
     # Configuration for the critic network architecture

@@ -69,6 +69,7 @@ from lerobot.common.constants import (
 from lerobot.common.datasets.factory import make_dataset
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.common.policies.factory import make_policy
+from lerobot.common.policies.sac.configuration_sac import SACConfig
 from lerobot.common.policies.sac.modeling_sac import SACPolicy
 from lerobot.common.robots import so100_follower  # noqa: F401
 from lerobot.common.teleoperators import gamepad, so100_leader  # noqa: F401
@@ -426,6 +427,8 @@ def add_actor_information_and_train(
                 )
 
             actions = batch["action"]
+            if isinstance(cfg.policy, SACConfig):
+                actions = actions.abs() ** (1.0 / cfg.policy.action_gamma) * torch.sign(actions)
             rewards = batch["reward"]
             observations = batch["state"]
             observations = add_wrist_mask(observations, cfg)
@@ -494,6 +497,8 @@ def add_actor_information_and_train(
             )
 
         actions = batch["action"]
+        if isinstance(cfg.policy, SACConfig):
+            actions = actions.abs() ** (1.0 / cfg.policy.action_gamma) * torch.sign(actions)
         rewards = batch["reward"]
         observations = batch["state"]
         observations = add_wrist_mask(observations, cfg)

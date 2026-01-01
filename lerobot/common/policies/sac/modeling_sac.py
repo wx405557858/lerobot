@@ -700,6 +700,13 @@ class SACObservationEncoder(nn.Module):
         self.has_text = self.config.use_text_prompt
         if not self.has_text:
             return
+        
+        if self.config.use_text_id:
+            self.text_id_dict = {
+                "Pick up the blue cylinder and move to reset position": 0,
+                "Insert the blue cylinder into the circular slot": 1,
+            }
+            return
 
         # Initialize CLIP text encoder
         from transformers import CLIPTextModel, CLIPTokenizer
@@ -924,6 +931,18 @@ class SACObservationEncoder(nn.Module):
             # Fallback: use default task
             text_prompts = ["pick up the object"] * batch_size
         
+        if self.config.use_text_id:
+            device = self.config.device
+            text_features = []
+            for prompt in text_prompts:
+                text_id = self.text_id_dict.get(prompt, 0)
+                text_id_tensor = torch.tensor(text_id, device=device)
+                one_hot = F.one_hot(text_id_tensor, num_classes=self.config.latent_dim).float()
+                text_features.append(one_hot)
+            text_features = torch.stack(text_features, dim=0)
+            text_features = text_features.to(device)
+            return text_features
+        
         # Tokenize text
         device = next(self.text_encoder.parameters()).device
         inputs = self.text_tokenizer(
@@ -938,11 +957,9 @@ class SACObservationEncoder(nn.Module):
         with torch.no_grad() if self.config.freeze_text_encoder else torch.enable_grad():
             text_features = self.text_encoder(**inputs).pooler_output
         
-        print(f"text_features before projection: {text_features}")
         # Project to latent dimension
         text_features = self.text_projection(text_features)
 
-        print(f"text_features after projection: {text_features}")
         return text_features
 
     @property

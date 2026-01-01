@@ -61,6 +61,7 @@ from lerobot.common.cameras import opencv  # noqa: F401
 from lerobot.common.datasets.factory import make_dataset
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.common.policies.factory import make_policy
+from lerobot.common.policies.sac.configuration_sac import SACConfig
 from lerobot.common.policies.sac.modeling_sac import SACPolicy
 from lerobot.common.robots import so100_follower  # noqa: F401
 from lerobot.common.teleoperators import gamepad, so101_leader  # noqa: F401
@@ -300,7 +301,14 @@ def act_with_policy(
         
         print(f"action {action}")
 
+        is_intervention = False
         # action = torch.Tensor([0, 0, 0, 1])
+        if "is_intervention" in info and info["is_intervention"]:
+            is_intervention = True
+
+        if isinstance(cfg.policy, SACConfig) and not is_intervention:
+            action = action.abs() ** cfg.policy.action_gamma * torch.sign(action)
+
         next_obs, reward, done, truncated, info = online_env.step(action)
 
         sum_reward_episode += float(reward)
@@ -308,7 +316,7 @@ def act_with_policy(
         episode_total_steps += 1
 
         # NOTE: We override the action if the intervention is True, because the action applied is the intervention action
-        if "is_intervention" in info and info["is_intervention"]:
+        if is_intervention:
             # NOTE: The action space for demonstration before hand is with the full action space
             # but sometimes for example we want to deactivate the gripper
             action = info["action_intervention"]
