@@ -90,6 +90,7 @@ from lerobot.common.utils.utils import (
 from lerobot.configs import parser
 from lerobot.configs.train import TrainRLServerPipelineConfig
 from lerobot.scripts.rl import learner_service
+from lerobot.scripts.rl.action_codec import decode_from_policy_action
 from lerobot.scripts.rl.gym_manipulator import make_robot_env
 
 ACTOR_SHUTDOWN_TIMEOUT = 30
@@ -286,6 +287,7 @@ def act_with_policy(
         
         obs_with_task = obs.copy()
         obs_with_task["task"] = [info["text_prompt"]]
+        flag_sampled_action = False
 
         if interaction_step >= cfg.policy.online_step_before_learning:
             # Time policy inference and check if it meets FPS requirement
@@ -298,6 +300,7 @@ def act_with_policy(
 
         else:
             action = online_env.action_space.sample()
+            flag_sampled_action = True
         
         print(f"action {action}")
 
@@ -306,8 +309,9 @@ def act_with_policy(
         if "is_intervention" in info and info["is_intervention"]:
             is_intervention = True
 
-        if isinstance(cfg.policy, SACConfig) and not is_intervention:
-            action = action.abs() ** cfg.policy.action_gamma * torch.sign(action)
+        if isinstance(cfg.policy, SACConfig) and not flag_sampled_action:
+            action = decode_from_policy_action(action, cfg.policy)
+        print(f"decoded action {action}")
 
         next_obs, reward, done, truncated, info = online_env.step(action)
 

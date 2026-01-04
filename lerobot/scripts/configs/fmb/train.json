@@ -17,7 +17,7 @@
         "disable_artifact": true
     },
     "dataset": {
-        "repo_id": "wx405557858/fmb_3",
+        "repo_id": "wx405557858/fmb_10",
         "use_imagenet_stats": false
     },
     "policy": {
@@ -57,10 +57,13 @@
             "action": {
                 "type": "ACTION",
                 "shape": [
-                    4
+                    5
                 ]
             }
         },
+        "action_shape": [
+            5
+        ],
         "device": "cuda",
         "use_amp": false,
         "dataset_stats": {
@@ -212,7 +215,7 @@
     },
     "name": "franka_sim",
     "mode": null,
-    "repo_id": "wx405557858/fmb_3",
+    "repo_id": "wx405557858/fmb_10",
     "dataset_root": null,
     "task": "InterbotixPickEnv-v0",
     "num_episodes": 30,
@@ -246,7 +249,7 @@
         "action": {
             "type": "ACTION",
             "shape": [
-                4
+                5
             ]
         }
     },

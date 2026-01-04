@@ -100,6 +100,7 @@ from lerobot.common.utils.wandb_utils import WandBLogger
 from lerobot.configs import parser
 from lerobot.configs.train import TrainRLServerPipelineConfig
 from lerobot.scripts.rl import learner_service
+from lerobot.scripts.rl.action_codec import encode_to_policy_action
 
 LOG_PREFIX = "[LEARNER]"
 
@@ -428,7 +429,7 @@ def add_actor_information_and_train(
 
             actions = batch["action"]
             if isinstance(cfg.policy, SACConfig):
-                actions = actions.abs() ** (1.0 / cfg.policy.action_gamma) * torch.sign(actions)
+                actions = encode_to_policy_action(actions, cfg.policy)
             rewards = batch["reward"]
             observations = batch["state"]
             observations = add_wrist_mask(observations, cfg)
@@ -498,7 +499,7 @@ def add_actor_information_and_train(
 
         actions = batch["action"]
         if isinstance(cfg.policy, SACConfig):
-            actions = actions.abs() ** (1.0 / cfg.policy.action_gamma) * torch.sign(actions)
+            actions = encode_to_policy_action(actions, cfg.policy)
         rewards = batch["reward"]
         observations = batch["state"]
         observations = add_wrist_mask(observations, cfg)

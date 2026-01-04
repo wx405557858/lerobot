@@ -16,6 +16,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
+from typing import List
 
 from lerobot.common.constants import ACTION, OBS_IMAGE, OBS_STATE
 from lerobot.common.optim.optimizers import MultiAdamConfig
@@ -145,7 +146,17 @@ class SACConfig(PreTrainedConfig):
     # Dimension of the image embedding pooling
     image_embedding_pooling_dim: int = 8
     # action mapping
-    action_gamma: float = 1.5
+    action_gamma: float = 1.0
+    # sigmoid scaling factor
+    action_sigmoid_scaling: float = 10.0
+    # action scaling
+    action_scaling: float = 0.9
+    # enable action scaling
+    enable_action_scaling: bool = True
+    # action scaling min
+    action_scaling_min: float = 0.2
+    # action scaling max
+    action_scaling_max: float = 1.2
 
     # Training parameter
     # Number of steps for online training
@@ -206,6 +217,7 @@ class SACConfig(PreTrainedConfig):
     use_imitation_learning: bool = True
     imitation_learning_weight: float = 0.5
     use_text_id: bool = True
+    action_shape: List[int] = field(default_factory=lambda: [4])
 
     # Network configuration
     # Configuration for the critic network architecture

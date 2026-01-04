@@ -55,7 +55,9 @@ class SACPolicy(
         self.ds_meta = ds_meta
 
         # Determine action dimension and initialize all components
-        continuous_action_dim = config.output_features["action"].shape[0]
+        # continuous_action_dim = config.output_features["action"].shape[0]
+        continuous_action_dim = config.action_shape[0]
+        print(f"{continuous_action_dim=}")
         self._init_normalization(dataset_stats)
         self._init_encoders()
         self._init_critics(continuous_action_dim)
@@ -437,8 +439,24 @@ class SACPolicy(
                 self.config.input_features, self.config.normalization_mapping, params
             )
             stats = dataset_stats or params
+            output_features = self.config.output_features
+            output_features["action"].shape = tuple(self.config.action_shape)
+            if self.config.enable_action_scaling:
+                # Hack for normalization dimensions
+                stats["action"]["min"] = np.concatenate(
+                    [stats["action"]["min"], np.array([0.0])],
+                )
+                stats["action"]["max"] = np.concatenate(
+                    [stats["action"]["max"], np.array([2.0])],
+                )
+                stats["action"]["mean"] = np.concatenate(
+                    [stats["action"]["mean"], np.array([1.0])],
+                )
+                stats["action"]["std"] = np.concatenate(
+                    [stats["action"]["std"], np.array([0.5])],
+                )
             self.normalize_targets = NormalizeBuffer(
-                self.config.output_features, self.config.normalization_mapping, stats
+                output_features, self.config.normalization_mapping, stats
             )
 
     def _init_encoders(self):
@@ -534,7 +552,8 @@ class SACPolicy(
     def _init_inverse_dynamics_model(self):
         """Initialize the inverse dynamics model."""
         input_dim = self.actor.out_features * 2  # Concatenate current and next embeddings
-        output_dim = self.config.output_features["action"].shape[0]
+        # output_dim = self.config.output_features["action"].shape[0]
+        output_dim = self.config.action_shape[0]
         self.inverse_dynamics_model = MLP(
             input_dim=input_dim,
             hidden_dims=[output_dim],
